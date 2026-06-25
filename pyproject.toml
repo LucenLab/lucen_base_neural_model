@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lucen"
+version = "0.1.0"
+description = "Forward model for through-skull content-band voxel contrast vs. neural synchrony"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Daniel Umemezie" }]
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+# Module 2 (acoustic propagation) only. A genuine published feature flag, kept
+# optional so Modules 1 & 3, the contract layer, and the invariant tests run
+# without the heavy k-Wave stack: `uv sync --extra propagation`.
+propagation = ["k-wave-python>=0.3"]
+
+# Development / test tooling lives in a uv dependency group, not a published extra:
+# it is installed by default on `uv sync` but never ships to consumers of the wheel.
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.4"]
+
+[tool.uv]
+# Build the editable install once; don't re-link the package on dependency-only
+# changes. Safe here because the package is pure Python with no compiled step.
+# (Remove if you want every `uv sync` to reinstall lucen itself.)
+package = true
+
+[tool.setuptools.packages.find]
+include = ["lucen*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra"
+# Surface a stale strict-xfail (a stub that started passing) as a failure, so the
+# suite tells us the moment a module is implemented and its xfail should be removed.
+xfail_strict = false
+
+[tool.ruff]
+target-version = "py311"
+line-length = 90
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
