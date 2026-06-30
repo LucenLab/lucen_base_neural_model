@@ -8,6 +8,13 @@ displacement floor -- to answer the Gate-A / Stage-1 detectability question. No
 Lucen-specific innovation is modelled here (the spec excludes it at this gate).
 """
 
+from base_neural_model.forward.budget import (
+    DEFAULT_AXIS_SPANS,
+    AxisSensitivity,
+    BudgetCurve,
+    acoustic_axis_ranking,
+    sweep_axis,
+)
 from base_neural_model.forward.detection import (
     AcquisitionParams,
     DetectionBudget,
@@ -18,10 +25,17 @@ from base_neural_model.forward.detection import (
 )
 
 __all__ = [
+    # detection layer
     "AcquisitionParams",
     "DetectionBudget",
     "detection_budget",
     "integration_gain",
     "phase_displacement_floor",
     "phase_to_displacement_m_per_rad",
+    # budget sweep
+    "BudgetCurve",
+    "sweep_axis",
+    "AxisSensitivity",
+    "acoustic_axis_ranking",
+    "DEFAULT_AXIS_SPANS",
 ]

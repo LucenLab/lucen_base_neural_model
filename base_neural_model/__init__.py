@@ -35,11 +35,15 @@ from base_neural_model.base import (
 )
 from base_neural_model.forward import (
     AcquisitionParams,
+    AxisSensitivity,
+    BudgetCurve,
     DetectionBudget,
+    acoustic_axis_ranking,
     detection_budget,
     integration_gain,
     phase_displacement_floor,
     phase_to_displacement_m_per_rad,
+    sweep_axis,
 )
 from base_neural_model.mechanics import (
     DisplacementTimeseries,
@@ -124,6 +128,11 @@ __all__ = [
     "integration_gain",
     "phase_displacement_floor",
     "phase_to_displacement_m_per_rad",
+    # forward acoustic budget sweep
+    "BudgetCurve",
+    "sweep_axis",
+    "AxisSensitivity",
+    "acoustic_axis_ranking",
     # model + gates + inverse
     "run_neural_model",
     "run_motor_cortex",

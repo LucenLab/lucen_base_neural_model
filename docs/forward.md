@@ -19,6 +19,8 @@ baseline using conventional research-system characteristics.
 base_neural_model/forward/
   detection.py   AcquisitionParams, integration gain, the Walker-Trahey floor,
                  and the DetectionBudget that composes them onto a source Delta z
+  budget.py      sweep the acoustic axes around one DetectionBudget: SNR-vs-skull-loss
+                 curves + the acoustic-side "which axis carries the verdict" ranking
 ```
 
 ## The two acoustic factors
@@ -88,6 +90,25 @@ now produced from first principles rather than asserted. The un-integrated sourc
 (~3.5 nm) sits far under the floor, which is precisely why the integration term is
 load-bearing.
 
+## The budget sweep — where is the wall, and which axis carries the verdict
+
+[`budget.py`](../base_neural_model/forward/budget.py) turns the single Gate-A point into
+a curve. Holding the source Δz fixed, `sweep_axis` varies one `AcquisitionParams` axis
+and returns a `BudgetCurve` (SNR in dB, surviving Δz, floor, denominator at each point)
+with a `crossing_value` — the axis value where SNR hits **0 dB** (signal == floor, the
+detection wall).
+
+`acoustic_axis_ranking` is the acoustic-side complement to the source-side Sobol collapse
+(`model/sensitivity.py`, which collapses onto η and s): a one-at-a-time local sensitivity
+ranking the four acquisition axes by their dB swing over their literature span. It leads
+with **skull loss and epoch** — the two strategic levers (the wall, and the motor
+integration advantage). At the demo baseline the wall sits at **~11 dB one-way (~22 dB
+two-way) skull loss**, so the demo's 12 dB assumption lands just past it (−2 dB). SNR
+falls a clean **−2 dB per one-way skull dB** (two-way × 20 log₁₀).
+
+[`scripts/plot_budget.py`](../scripts/plot_budget.py) renders both: SNR-vs-skull-loss at
+three echo-SNR levels with the wall and the demo point, plus the axis ranking.
+
 ## Tests
 
 [`test_detection.py`](../tests/test_detection.py) pins the ×14/×77 integration gain, the
@@ -95,3 +116,6 @@ load-bearing.
 its rise with skull dB, and the echo-SNR↔clutter denominator flip.
 [`test_model_run.py`](../tests/test_model_run.py) pins the acquisition-wired verdict and
 that the motor demo lands within an order of the floor.
+[`test_budget.py`](../tests/test_budget.py) pins the −2 dB/dB skull slope, the 0 dB
+crossing, the clutter-denominator flip along a sweep, and the axis ranking leading with
+skull loss + epoch.
