@@ -30,7 +30,7 @@ r.all_gates_pass                        # the three kill gates
 
 See [`docs/architecture.md`](docs/architecture.md) — **start here.**
 
-## Design invariants (non-negotiable, enforced as code)
+## Design invariants
 
 1. **SI units everywhere.** Metres, Hz, seconds, Pa, kg/m³, m/s. Convert to
    human-readable units only at the reporting boundary
@@ -120,4 +120,4 @@ displacement from a reduced neural state — decomposed to its biophysical facto
 (Eshelby κ, poroelastic η, content-band survival), scored against three kill gates,
 and shown (via Sobol sensitivity and verdict-flip) to collapse onto the net-dilatation
 fraction η and the activity drive that sets synchrony. It deliberately stops before
-any sensing modality: it is the neural model, not a detector.
+any sensing modality: it is a neural model, not a detector.
