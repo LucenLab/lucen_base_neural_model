@@ -27,6 +27,7 @@ from base_neural_model.model.resolution import (
 from base_neural_model.model.run import (
     NeuralModelReport,
     run_motor_cortex,
+    run_motor_demo,
     run_motor_trial,
     run_neural_model,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "run_neural_model",
     "run_motor_cortex",
     "run_motor_trial",
+    "run_motor_demo",
     "NeuralModelReport",
     # the three kill gates
     "passes_stage1_gate",

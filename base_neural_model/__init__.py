@@ -33,6 +33,14 @@ from base_neural_model.base import (
     merge,
     require_content_fast,
 )
+from base_neural_model.forward import (
+    AcquisitionParams,
+    DetectionBudget,
+    detection_budget,
+    integration_gain,
+    phase_displacement_floor,
+    phase_to_displacement_m_per_rad,
+)
 from base_neural_model.mechanics import (
     DisplacementTimeseries,
     MatrixParams,
@@ -71,6 +79,7 @@ from base_neural_model.model import (
     passes_stage1_gate,
     run_model_sobol,
     run_motor_cortex,
+    run_motor_demo,
     run_motor_trial,
     run_neural_model,
     scaled_voxel,
@@ -108,10 +117,18 @@ __all__ = [
     "DisplacementTimeseries",
     "displacement_timeseries",
     "displacement_spectrum",
+    # forward acoustic / detection layer (the source/sensing seam)
+    "AcquisitionParams",
+    "DetectionBudget",
+    "detection_budget",
+    "integration_gain",
+    "phase_displacement_floor",
+    "phase_to_displacement_m_per_rad",
     # model + gates + inverse
     "run_neural_model",
     "run_motor_cortex",
     "run_motor_trial",
+    "run_motor_demo",
     "NeuralModelReport",
     "passes_stage1_gate",
     "passes_content_survival_gate",

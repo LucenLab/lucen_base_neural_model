@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from base_neural_model.model import run_neural_model
+from base_neural_model.forward.detection import AcquisitionParams
+from base_neural_model.model import run_motor_demo, run_neural_model
 
 
 @pytest.fixture(scope="module")
@@ -61,6 +62,52 @@ def test_neural_state_drives_displacement(report):
     """A real (oscillatory) neural state yields a positive content-surviving signal."""
     assert report.neural_state.synchrony_fraction > 0.0
     assert report.displacement_timeseries.peak_dz_m > 0.0
+
+
+# --- the acoustic detection layer (Gate A / Stage 1) ----------------------------
+
+
+def test_detection_absent_without_acquisition(report):
+    """Source-side run: no acquisition -> no detection budget, scalar-floor scoring."""
+    assert report.detection is None
+
+
+def test_acquisition_attaches_detection_budget():
+    """Supplying an acquisition attaches a budget and scores against the derived floor."""
+    r = run_neural_model(
+        duration_s=0.5, fs_hz=2000.0, acquisition=AcquisitionParams.demo_motor()
+    )
+    assert r.detection is not None
+    d = r.detection
+    assert d.integration_gain == pytest.approx(77.46, rel=1e-3)
+    assert d.surviving_dz_m > 0.0
+    assert d.floor_m > 0.0
+    assert d.limiting_denominator == "echo_snr"
+
+
+def test_motor_demo_lands_within_an_order_of_the_floor():
+    """The flagship Gate A: integration lifts the source within ~an order of the floor.
+
+    The spec's success criterion is 'within one to two orders of magnitude of the
+    detection floor'. With the demo's conservative echo SNR and skull loss the motor
+    source, after the ~x77 integration gain, lands within a single order of the derived
+    through-skull floor -- the engineering-sized gap, not a wall.
+    """
+    r = run_motor_demo()
+    d = r.detection
+    assert d is not None
+    # Within one order: SNR in dB is better than -20 dB (a factor of 10 in displacement).
+    assert d.snr_db > -20.0
+    # The integration gain is load-bearing: without it the bare source is far under.
+    bare = d.surviving_dz_m / d.integration_gain
+    assert bare < d.floor_m  # the un-integrated source alone does not clear the floor
+
+
+def test_clutter_limited_run_reports_clutter():
+    """A large residual clutter floor flips the binding denominator in a full run."""
+    r = run_motor_demo(residual_clutter_m=1e-5)
+    assert r.detection is not None
+    assert r.detection.limiting_denominator == "clutter"
 
 
 # --- helpers (mirror run.py defaults) -------------------------------------------

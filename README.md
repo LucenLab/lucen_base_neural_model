@@ -69,6 +69,8 @@ docs/            subsystem-by-subsystem architecture docs
 - [`docs/mechanics.md`](docs/mechanics.md) — the transduction chain (κ, η, the
   directional channel).
 - [`docs/model.md`](docs/model.md) — the gates, the inverse and global analyses.
+- [`docs/forward.md`](docs/forward.md) — the source/sensing seam: within-epoch √N
+  integration + the through-skull Walker–Trahey detection floor (Gate A / Stage 1).
 - [`docs/motor_cortex.md`](docs/motor_cortex.md) — the motor-cortex (M1) variant:
   beta rhythm, columnar Betz-cell alignment, movement trials.
 

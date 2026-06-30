@@ -81,3 +81,33 @@ def movement_drive(profile: MovementProfile | None = None) -> Callable[[float], 
         return max(0.0, p.drive_base - suppression + rebound)
 
     return drive
+
+
+def sustained_imagery_drive(
+    drive_level: float = 1.3,
+    *,
+    ramp_s: float = 0.1,
+) -> Callable[[float], float]:
+    """Build a **sustained** motor-imagery drive ``P(t)`` (seconds -> drive).
+
+    This is the regime the flagship demo's source term relies on, and it is the
+    *opposite* of :func:`movement_drive`'s onset desync: motor imagery activates a
+    large population that fires with relatively high synchrony and **sustains** that
+    activation over the whole epoch (hundreds of ms to seconds), which is what lets the
+    detection layer integrate ``sqrt(N_ens)`` frames at a high, stable synchrony. The
+    drive is a constant elevated level (no dip, no rebound), with a short smooth ramp
+    from rest so the integration does not start on a transient.
+
+    ``drive_level`` is the held drive (above the steady ``EIParams.motor_cortex``
+    baseline of 1.3 to push synchrony up); ``ramp_s`` is the rest->hold rise time.
+    """
+    if drive_level < 0.0:
+        raise ValueError(f"drive_level must be >= 0, got {drive_level!r}")
+    if ramp_s <= 0.0:
+        raise ValueError(f"ramp_s must be positive, got {ramp_s!r}")
+
+    def drive(t: float) -> float:
+        # Smooth saturating ramp from 0 to drive_level over ~ramp_s, then held.
+        return drive_level * (1.0 - math.exp(-max(0.0, t) / ramp_s))
+
+    return drive
