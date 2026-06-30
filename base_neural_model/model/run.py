@@ -21,7 +21,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
-from base_neural_model.activity.motor_drive import MovementProfile, movement_drive
+from base_neural_model.activity.motor_drive import (
+    MovementProfile,
+    movement_drive,
+    sustained_imagery_drive,
+)
 from base_neural_model.activity.populations import EIParams
 from base_neural_model.activity.reduce import reduce_to_state
 from base_neural_model.activity.timeseries import ActivityTimeseries, run_activity
@@ -31,6 +35,11 @@ from base_neural_model.base.types import (
     MechanicsParams,
     NeuralState,
     VoxelGeometry,
+)
+from base_neural_model.forward.detection import (
+    AcquisitionParams,
+    DetectionBudget,
+    detection_budget,
 )
 from base_neural_model.mechanics.neuron_constants import (
     get_single_neuron_displacement,
@@ -80,6 +89,10 @@ class NeuralModelReport:
     passes_content_gate: bool
     passes_dilatation_gate: bool
     provenance: Provenance
+    # Acoustic detection verdict (Gate A / Stage 1). Populated only when an
+    # AcquisitionParams is supplied; None keeps the model strictly source-side, and
+    # the gates then score against the scalar unaberrated_floor_m as before.
+    detection: DetectionBudget | None = None
 
     @property
     def all_gates_pass(self) -> bool:
@@ -99,6 +112,8 @@ def run_neural_model(
     duration_s: float = 1.0,
     fs_hz: float = 2000.0,
     unaberrated_floor_m: float = DEFAULT_FLOOR_M,
+    acquisition: AcquisitionParams | None = None,
+    residual_clutter_m: float = 0.0,
     drive_fn: Callable[[float], float] | None = None,
 ) -> NeuralModelReport:
     """Run the full activity -> mechanics model and return both deliverables.
@@ -107,6 +122,16 @@ def run_neural_model(
     mechanics chain on a representative cortical voxel. The cited single-neuron
     displacement is pinned into the mechanics params (Invariant 2). The amplitude and
     content-survival gates score the static state; the dilatation gate scores eta.
+
+    ``acquisition`` opts in to the acoustic detection layer (Gate A / Stage 1): when
+    given, the static displacement is composed with a conventional phase-sensitive
+    ultrafast acquisition into a :class:`~base_neural_model.forward.detection.
+    DetectionBudget`, and the amplitude / content-survival gates score against the
+    *derived* through-skull floor (``budget.floor_m``) with the integration gain
+    folded into the signal -- instead of the scalar ``unaberrated_floor_m``.
+    ``residual_clutter_m`` is the post-clutter-filter residual that competes with the
+    echo-SNR floor for the binding denominator. When ``acquisition is None`` the model
+    stays strictly source-side and the scalar-floor path is unchanged.
 
     ``drive_fn`` is an optional time-varying excitatory drive ``P(t)`` (e.g. a
     movement-locked motor profile); when given, the activity tracks the imposed event
@@ -135,16 +160,36 @@ def run_neural_model(
         d_single, geom, static_params, state.synchrony_fraction
     )
 
+    # Acoustic detection layer (Gate A / Stage 1): when an acquisition is supplied,
+    # derive the through-skull floor and fold the within-epoch integration gain into
+    # the signal. Scoring the gates against floor / sqrt(N_ens) is exactly equivalent
+    # to amplifying the signal by sqrt(N_ens), so the gates stay unchanged.
+    detection: DetectionBudget | None = None
+    if acquisition is None:
+        amp_floor_m = unaberrated_floor_m
+        content_floor_m = unaberrated_floor_m
+    else:
+        detection = detection_budget(
+            static, acquisition, residual_clutter_m=residual_clutter_m
+        )
+        amp_floor_m = detection.floor_m / detection.integration_gain
+        content_floor_m = amp_floor_m
+
     # Gates score the static state (a one-element sweep).
     sweep = [static]
-    amp = passes_stage1_gate(sweep, unaberrated_floor_m=unaberrated_floor_m)
-    content = passes_content_survival_gate(sweep, estimate_floor_m=unaberrated_floor_m)
+    amp = passes_stage1_gate(sweep, unaberrated_floor_m=amp_floor_m)
+    content = passes_content_survival_gate(sweep, estimate_floor_m=content_floor_m)
     dilat = passes_dilatation_gate(sweep)
 
+    prov_source = (
+        "base_neural_model end-to-end (activity -> mechanics, no sensing)"
+        if acquisition is None
+        else "base_neural_model end-to-end (activity -> mechanics -> acoustic detection)"
+    )
     provenance = merge(
         ts.provenance,
         static.provenance,
-        source="base_neural_model end-to-end (activity -> mechanics, no sensing)",
+        source=prov_source,
     )
     return NeuralModelReport(
         activity=activity,
@@ -156,6 +201,7 @@ def run_neural_model(
         passes_content_gate=content,
         passes_dilatation_gate=dilat,
         provenance=provenance,
+        detection=detection,
     )
 
 
@@ -218,5 +264,41 @@ def run_motor_trial(
         duration_s=duration_s,
         fs_hz=fs_hz,
         unaberrated_floor_m=unaberrated_floor_m,
+        drive_fn=drive,
+    )
+
+
+def run_motor_demo(
+    *,
+    drive_level: float = 1.3,
+    acquisition: AcquisitionParams | None = None,
+    residual_clutter_m: float = 0.0,
+    duration_s: float = 1.5,
+    fs_hz: float = 2000.0,
+) -> NeuralModelReport:
+    """Run the **flagship-demo Gate A**: sustained motor imagery -> detectability verdict.
+
+    The single call that *is* the demo's Stage-1 / Gate-A source sweep. It wires the M1
+    presets (beta-band E/I, columnar layer-5 mechanics, layer-5 voxel) with a
+    **sustained** motor-imagery drive (:func:`base_neural_model.activity.motor_drive.
+    sustained_imagery_drive`) -- high, stable synchrony held across the epoch, the
+    favorable source term -- and scores it through the acoustic detection layer against
+    the derived through-skull floor with the within-epoch integration gain folded in.
+
+    ``acquisition`` defaults to :meth:`AcquisitionParams.demo_motor` (1.5 s epoch at
+    4 kHz -> ~x77 integration gain). The activity ``duration_s`` defaults to match the
+    acquisition epoch so the dynamics and the integration window describe the same
+    epoch. Pass ``residual_clutter_m`` to test the clutter-limited regime.
+    """
+    acq = acquisition or AcquisitionParams.demo_motor()
+    drive = sustained_imagery_drive(drive_level)
+    return run_neural_model(
+        EIParams.motor_cortex(),
+        geom=VoxelGeometry.motor_cortex_layer5(),
+        mechanics=MechanicsParams.motor_cortex(),
+        duration_s=duration_s,
+        fs_hz=fs_hz,
+        acquisition=acq,
+        residual_clutter_m=residual_clutter_m,
         drive_fn=drive,
     )

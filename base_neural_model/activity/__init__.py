@@ -14,6 +14,7 @@ from base_neural_model.activity.jitter import (
 from base_neural_model.activity.motor_drive import (
     MovementProfile,
     movement_drive,
+    sustained_imagery_drive,
 )
 from base_neural_model.activity.neural_mass import integrate_ei
 from base_neural_model.activity.orientation import (
@@ -58,6 +59,7 @@ __all__ = [
     # movement-locked motor dynamics
     "MovementProfile",
     "movement_drive",
+    "sustained_imagery_drive",
     # the timeseries + driver
     "ActivityTimeseries",
     "run_activity",

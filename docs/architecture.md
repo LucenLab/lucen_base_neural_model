@@ -35,6 +35,13 @@ ultrasound, propagation, or detection. It has two layers wired into one pipeline
 | Activity (dynamical) | [`activity/`](../base_neural_model/activity/) | [activity.md](activity.md) |
 | Mechanics (transduction) | [`mechanics/`](../base_neural_model/mechanics/) | [mechanics.md](mechanics.md) |
 | Model (gates + analyses) | [`model/`](../base_neural_model/model/) | [model.md](model.md) |
+| Forward (acoustic detection) | [`forward/`](../base_neural_model/forward/) | [forward.md](forward.md) |
+
+The first four layers stop *before* any sensing. `forward/` is the explicit
+source/sensing seam: it composes the source Δz with a conventional phase-sensitive
+ultrasound acquisition (within-epoch √N integration + the through-skull Walker–Trahey
+floor) to answer the Gate-A / Stage-1 detectability question. Opt-in via
+`run_neural_model(acquisition=…)`; the source layers are untouched when it is absent.
 
 ## The two deliverables
 
