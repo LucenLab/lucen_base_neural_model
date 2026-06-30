@@ -20,10 +20,13 @@ one model run, following neural activity to a predicted nanometre displacement:
    vs the incoherent pedestal, and before vs after the jitter low-pass.
 
 ```bash
-uv run python scripts/plot_neural_summary.py                       # generic cortex (gamma, ~40 Hz)
-uv run python scripts/plot_neural_summary.py --motor               # M1 high-beta (~21 Hz)
-uv run python scripts/plot_neural_summary.py --motor --low-beta    # M1 low-beta  (~17 Hz)
+uv run python scripts/plot_neural_summary.py                                                      # generic cortex (gamma, ~40 Hz)
+uv run python scripts/plot_neural_summary.py --motor -o plots/neural_summary_motor.png            # M1 high-beta (~21 Hz)
+uv run python scripts/plot_neural_summary.py --motor --low-beta -o plots/neural_summary_motor_low_beta.png  # M1 low-beta (~17 Hz)
 ```
+
+(The `--motor` variants default their output to `neural_summary.png`; pass `-o` to write
+the `_motor` / `_motor_low_beta` filenames as above.)
 
 `neural_summary_motor.png` (high-beta) and `neural_summary_motor_low_beta.png`
 (low-beta) are the M1 variants: a beta rhythm, an active directional channel (the
@@ -58,6 +61,7 @@ are the gamma defaults).
 | `min_eta.png` | `plot_min_eta.py` | the minimum detectable dilatation fraction η*(s) |
 | `min_directional.png` | `plot_min_directional.py` | the directional bench targets β*(s,μ) and Q*(s,μ), with the g≤0 (no-rescue) regime |
 | `resolution.png` | `plot_resolution.py` | the finest feasible voxel resolution vs (η, s) |
+| `budget.png` | `plot_budget.py` | the acoustic SNR budget: detectability vs skull two-way loss (per echo-SNR level, with the 0 dB wall and the motor-demo operating point) and the acoustic-side axis ranking (skull loss + epoch lead) |
 
 Regenerate all of them by running each script (they default their output here, into
 `plots/`). Pass `-o <path>` to write elsewhere or `--show` to open a window.
