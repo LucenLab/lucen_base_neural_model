@@ -21,11 +21,8 @@ dist/
 .coverage
 htmlcov/
 
-# k-Wave binary / simulation caches and scratch outputs
-*.h5
-*.mat
-kwave_input/
-kwave_output/
+# Generated figures (the scripts write here; the folder is kept via .gitkeep)
+plots/*.png
 
 # Editor / OS cruft
 .vscode/

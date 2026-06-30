@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from lucen.base.bands import Band
+from base_neural_model.base.bands import Band
 
 
 @dataclass(frozen=True)

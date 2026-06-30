@@ -1,18 +1,16 @@
-"""Invariant 6 / spec section 7.4 - provenance non-null.
+"""Invariant 6 - provenance non-null.
 
-No quantity reaches the deliverable without a populated provenance chain. Tested
-end-to-end through Module 1 now; the full-pipeline assertion is marked xfail until
-orchestration (Modules 2 & 3) lands.
+No quantity reaches a deliverable without a populated provenance chain, tested
+end-to-end from the cited constant through the activity -> mechanics model.
 """
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
-from lucen.base.bands import Band
-from lucen.base.provenance import Provenance, extend, merge
-from lucen.source import get_single_neuron_displacement, synchrony_sweep
+from base_neural_model import displacement_sweep, get_single_neuron_displacement
+from base_neural_model.base.bands import Band
+from base_neural_model.base.provenance import Provenance, extend, merge
 
 
 def test_cited_constant_carries_provenance():
@@ -22,15 +20,23 @@ def test_cited_constant_carries_provenance():
     assert d.provenance.band is Band.CONTENT_FAST
 
 
-def test_summation_extends_provenance(d_single, voxel, synchrony_grid):
-    """Every summed quantity carries the cited provenance plus the model's own."""
-    sweep = synchrony_sweep(d_single, voxel, synchrony_grid)
+def test_source_chain_extends_provenance(d_single, voxel, source_params, synchrony_grid):
+    """Every source quantity carries the cited provenance plus the chain's own.
+
+    The load-bearing unknowns (eta, kappa, sigma_t) must be named in provenance
+    so a reviewer can contest each factor in isolation (source physics doc 6).
+    """
+    sweep = displacement_sweep(d_single, voxel, source_params, synchrony_grid)
     base_n = len(d_single.provenance.assumptions)
     for s in sweep:
         assert s.provenance.source == d_single.provenance.source
-        # Summation adds the interpolation form + the neuron count.
+        # The chain adds the volume relation, packing, kappa/eta, and jitter.
         assert len(s.provenance.assumptions) > base_n
         assert s.provenance.band is Band.CONTENT_FAST
+        joined = " ".join(s.provenance.assumptions)
+        assert "eta" in joined
+        assert "kappa" in joined
+        assert "sigma_t" in joined
 
 
 def test_extend_appends_and_relabels():
@@ -56,21 +62,14 @@ def test_merge_rejects_band_mismatch():
         merge(p, q)
 
 
-@pytest.mark.xfail(
-    reason="orchestration (Modules 2 & 3) not yet implemented", strict=True
-)
-def test_feasibility_curve_provenance_chain_populated():
-    """Full-pipeline provenance: enable once run_feasibility_sweep is implemented."""
-    from lucen.orchestration import run_feasibility_sweep
+def test_end_to_end_model_provenance_chain_populated():
+    """The full activity -> mechanics report decomposes to its cited inputs."""
+    from base_neural_model.model import run_neural_model
 
-    run_feasibility_sweep(  # will raise NotImplementedError -> xfail
-        geom=None,
-        skull=None,
-        array_geometry=None,
-        noise=None,
-        bulk=None,
-        synchrony_grid=np.linspace(0, 1, 5),
-        interrogation_freq_hz=2e6,
-        n_frames_per_unit=100,
-        separability_threshold_db=10.0,
-    )
+    report = run_neural_model(duration_s=0.3, fs_hz=2000.0)
+    assert report.provenance.source
+    # The chain carries both the activity (E/I) and the cited single-neuron sources.
+    joined = report.provenance.source + " ".join(report.provenance.assumptions)
+    assert "Wilson" in joined or "E/I" in joined
+    assert any("single-neuron" in a or "AP membrane" in a
+               for a in report.provenance.assumptions)

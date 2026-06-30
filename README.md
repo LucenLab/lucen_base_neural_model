@@ -1,111 +1,123 @@
-# Lucen — Forward Model
+# base_neural_model
 
-A three-module forward simulation that computes **one number**: the through-skull,
-content-band voxel displacement **contrast** versus the post-clutter noise floor — as
-a *curve* over neural synchrony, with the crossover synchrony named.
+A comprehensive model of **what neural activity is and what mechanical signal it
+produces in tissue** — a dynamical neural-activity layer feeding a biophysical
+transduction chain, stopping *before* any sensing, ultrasound, or detection.
 
-Everything in this repo exists to produce that number honestly and to localize
-*which* term kills it if it dies. See [`lucen_forward_model_spec.md`](lucen_forward_model_spec.md)
-for the full technical specification.
+Two layers, one pipeline:
 
-## Design invariants (non-negotiable)
+1. **Activity** — a Wilson–Cowan excitatory/inhibitory **neural-mass model**
+   integrated over time (`scipy`), producing firing, oscillations, and population
+   **synchrony**, reduced to a `NeuralState` (synchrony `s`, jitter `σ_t`, content
+   corner `f_c`, mean rate).
+2. **Mechanics** — the transduction chain membrane Δr → per-cell volume change →
+   tissue strain ε_V → **net axial dilatation Δz**, with the Eshelby confinement
+   factor κ and the poroelastic dilatation fraction η.
+
+It produces **two deliverables**: an activity-driven displacement **timeseries
+`dz(t)`** with its content-band spectrum, and the **static tissue displacement from a
+neural state** with its full decomposition.
+
+```python
+from base_neural_model.model import run_neural_model
+
+r = run_neural_model()
+r.neural_state.synchrony_fraction       # s, from the Kuramoto order parameter
+r.displacement_timeseries.peak_dz_m     # (a) the dz(t) timeseries peak
+r.mechanical_displacement.value_m       # (b) the static dz(neural_state)
+r.all_gates_pass                        # the three kill gates
+```
+
+See [`docs/architecture.md`](docs/architecture.md) — **start here.**
+
+## Design invariants (non-negotiable, enforced as code)
 
 1. **SI units everywhere.** Metres, Hz, seconds, Pa, kg/m³, m/s. Convert to
-   human-readable units only at the reporting boundary ([`lucen/base/units.py`](lucen/base/units.py)).
-   A single nm/µm slip moves the verdict by three orders of magnitude.
+   human-readable units only at the reporting boundary
+   ([`base/units.py`](base_neural_model/base/units.py)). A single nm/µm slip moves the
+   verdict by three orders of magnitude.
 2. **Single-neuron displacement is a cited constant**, never simulated
-   ([`lucen/source/neuron_constants.py`](lucen/source/neuron_constants.py)).
-3. **The fast/content band is the target, never the slow envelope.** Enforced as a
-   typed guard, not a comment ([`lucen/base/bands.py`](lucen/base/bands.py)).
-4. **Synchrony is the swept independent variable.** The output is always a curve.
-5. **Every stage scores against a kill criterion** (`passes_*_gate`), not just a plot.
-6. **Provenance propagates** ([`lucen/base/provenance.py`](lucen/base/provenance.py)) so the
-   final number decomposes back to its inputs.
+   ([`mechanics/neuron_constants.py`](base_neural_model/mechanics/neuron_constants.py)).
+3. **The content band is the target, never the slow envelope.** A typed `Band` guard
+   ([`base/bands.py`](base_neural_model/base/bands.py)) makes the category error a
+   raised exception.
+4. **Synchrony is produced by the activity layer** (the Kuramoto order parameter),
+   then swept through the mechanics — never asserted by hand.
+5. **Every gate scores against a kill criterion** (`passes_*_gate`).
+6. **Provenance propagates** ([`base/provenance.py`](base_neural_model/base/provenance.py))
+   from the cited constant and the E/I parameters to both deliverables.
 
 ## Layout
 
 ```text
-lucen/
+base_neural_model/
   base/          SI units, temporal bands, provenance, the typed data contracts
-  source/        Module 1 — population summation (the deciding build) [IMPLEMENTED]
-  propagation/   Module 2 — acoustic propagation through skull (k-Wave) [SCAFFOLD]
-  detection/     Module 3 — detection and the contrast verdict        [SCAFFOLD]
-  orchestration/ wires M1→M2→M3 and runs the synchrony sweep          [SCAFFOLD]
-tests/           unit-consistency + invariant tests (spec §7)
+  activity/      the dynamical neural-mass layer (E/I ODEs → synchrony, NeuralState)
+  mechanics/     the transduction chain: neural state → net axial tissue displacement
+  model/         the end-to-end model, the three kill gates, the inverse analyses
+tests/           invariant + layer tests
+scripts/         live figures (matplotlib) recomputed from the model
+docs/            subsystem-by-subsystem architecture docs
 ```
 
-`base/` and Module 1 (`source/`) are implemented and tested. Modules 2–3 and the
-orchestration are typed stubs — every function has its signature, types, docstring,
-and a `NotImplementedError` body marking the implementation work.
+## Architecture docs
 
-## Build order (the falsification discipline — spec §8)
-
-Each step can kill the project for less compute than the step after it.
-
-1. `base/` — units, types, bands, provenance. ✅
-2. **Module 1 + its gate** — the synchrony sweep against an assumed unaberrated
-   floor, *before touching k-Wave*. Pure arithmetic; the cheapest falsification. ✅
-3. **Module 3** against synthetic propagated inputs (validate the detection chain
-   and clutter filter in isolation).
-4. **Module 2** on k-Wave — `method="none"` baseline, then minimal correction, then
-   the corrected-vs-uncorrected recovery factor.
-5. **Orchestration** — wire the full sweep, produce the feasibility curve, run
-   Stages 0–2.
-6. Only if favorable: the deferred metamaterial inverse-design correction (spec §4.4).
+- [`docs/architecture.md`](docs/architecture.md) — the map: the two-layer pipeline,
+  invariants, build order. **Start here.**
+- [`docs/base.md`](docs/base.md) — foundation: units, bands, provenance, contracts.
+- [`docs/activity.md`](docs/activity.md) — the dynamical neural-mass layer.
+- [`docs/mechanics.md`](docs/mechanics.md) — the transduction chain (κ, η, the
+  directional channel).
+- [`docs/model.md`](docs/model.md) — the gates, the inverse and global analyses.
+- [`docs/motor_cortex.md`](docs/motor_cortex.md) — the motor-cortex (M1) variant:
+  beta rhythm, columnar Betz-cell alignment, movement trials.
 
 ## Setup
 
-This project is managed with [uv](https://docs.astral.sh/uv/). The Python version is
-pinned in [`.python-version`](.python-version) and the exact dependency set is locked in
-[`uv.lock`](uv.lock) — both are committed, so every checkout resolves identically.
+This project is managed with [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync                       # create .venv + install lucen + dev tools (pytest, ruff)
-uv sync --extra propagation   # + k-wave-python (Module 2 only; heavy)
-uv sync --no-dev              # runtime deps only, no pytest/ruff
+uv sync               # create .venv + install base_neural_model + dev tools
+uv sync --no-dev      # runtime deps only (numpy, scipy, SALib, scikit-fem)
+uv sync --group viz   # + matplotlib for the scripts/ figures
 ```
-
-`uv sync` creates and maintains `.venv` for you — no manual `venv`/`activate` step.
-The `dev` group (pytest, ruff) installs by default; `propagation` is an **optional
-extra**, imported lazily inside [`lucen/propagation/medium.py`](lucen/propagation/medium.py),
-so everything except Module 2 runs without `k-wave-python`.
-
-> Editing dependencies: `uv add <pkg>` / `uv remove <pkg>` updates `pyproject.toml`
-> and `uv.lock` together. After changing `pyproject.toml` by hand, run `uv lock` to
-> refresh the lockfile.
 
 ## Running
 
-Prefix commands with `uv run` to execute inside the project environment (it auto-syncs
-first), or activate `.venv` and run them directly.
-
 ```bash
-uv run pytest               # invariant tests (spec §7); stub-dependent tests xfail/skip
+uv run pytest               # the invariant + layer tests
 uv run ruff check .         # lint
 ```
 
-Module 1 is usable directly:
+The end-to-end model:
 
 ```python
-import numpy as np
-from lucen.source import get_single_neuron_displacement, synchrony_sweep, passes_stage1_gate
-from lucen.base.types import VoxelGeometry
+from base_neural_model.activity import run_activity, reduce_to_state
+from base_neural_model.model import run_neural_model
 
-d1 = get_single_neuron_displacement()                     # cited constant + provenance
-geom = VoxelGeometry(extent_axial_m=3e-4, extent_lateral_m=1e-3,
-                     neuron_count=10_000, depth_m=2e-2)
-sweep = synchrony_sweep(d1, geom, np.linspace(0, 1, 51))  # the source-term curve
-passes_stage1_gate(sweep, unaberrated_floor_m=1e-7)       # the Stage-1 kill criterion
+ts = run_activity()                 # integrate the E/I neural-mass model
+state = reduce_to_state(ts)         # → NeuralState (s, σ_t, f_c, rate)
+report = run_neural_model()         # both deliverables + the three gates
 ```
 
-## What this build does and does not establish
+Figures (after `uv sync --group viz`) render into [`plots/`](plots/). The headline
+is the consolidated **neural-model summary** — one figure following activity →
+`NeuralState` → predicted Δz, with the coherent-neuron count, the jitter-survival
+curve, and the displacement decomposition:
 
-**Establishes:** whether, given the cited single-neuron displacement and a
-parameterized synchrony, the content-band voxel contrast survives skull attenuation
-and aberration to a separability bar after bulk-motion filtering — as a curve over
-synchrony, decomposable to its inputs, with the crossover point named.
+```bash
+uv run python scripts/plot_neural_summary.py            # generic cortex
+uv run python scripts/plot_neural_summary.py --motor    # motor cortex (M1)
+```
 
-**Does not establish:** the true synchrony of speech cortex (imported as a sweep, not
-measured), single-trial real-time decode, or the crossed-beam upgrade. The simulation
-replaces the prior with a number; it does not by itself prove real-time millimetre
-speech decoding.
+See [`plots/README.md`](plots/README.md) for all the figures.
+
+## What this build establishes
+
+From a dynamical model of neural activity, it produces the tissue mechanical
+displacement that activity generates — both as a timeseries `dz(t)` and as a static
+displacement from a reduced neural state — decomposed to its biophysical factors
+(Eshelby κ, poroelastic η, content-band survival), scored against three kill gates,
+and shown (via Sobol sensitivity and verdict-flip) to collapse onto the net-dilatation
+fraction η and the activity drive that sets synchrony. It deliberately stops before
+any sensing modality: it is the neural model, not a detector.

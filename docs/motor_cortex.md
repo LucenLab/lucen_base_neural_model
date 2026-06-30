@@ -1,0 +1,99 @@
+# Motor cortex (M1) — the directional variant
+
+The model can be aimed at **primary motor cortex (M1)**, where the neural-displacement
+question is most concrete: M1 is the site of the largest, most strongly aligned
+cortical output cells (layer-5 pyramidal / Betz cells) and a movement-locked beta
+rhythm — exactly the conditions under which the **directional channel** (orientation
+coherence) matters.
+
+```python
+from base_neural_model import run_motor_cortex
+r = run_motor_cortex()
+r.neural_state.content_freq_hz          # ~19 Hz (beta), not gamma
+r.neural_state.orientation_coherence    # Q_eff, emerged from columnar alignment
+r.mechanical_displacement.directional_axial_m   # the directional signal share
+```
+
+## What makes M1 different (and why it changes the numbers)
+
+| Feature | Generic column | Motor cortex (M1) |
+|---|---|---|
+| Rhythm | gamma (~28 Hz) | **beta (~19 Hz)** — the sensorimotor rhythm |
+| Cell axes | isotropic (random) | **strongly columnar** (`Q_struct ≈ 0.9`) |
+| Cell size | ~8 µm | **~20 µm** large layer-5 / Betz somata (sparse) |
+| Directional channel | inert | **active** (~13% of the signal) |
+| Voxel depth | generic 2 cm | **M1 layer 5**, ~1.8 mm |
+
+The three presets:
+
+- **`EIParams.motor_cortex()`** — slower membrane time constants place the E/I limit
+  cycle in the **beta band**; `structural_alignment ≈ 0.9` marks the strongly
+  columnar layer-5 population. That structural alignment, expressed through the
+  temporal synchrony, *generates* the orientation coherence (the Option-2 path):
+  `Q_eff = Q_struct · s`.
+- **`MechanicsParams.motor_cortex()`** — large (`r ≈ 20 µm`) Betz-cell somata and a
+  substantial per-cell **anisotropy** `β ≈ 0.6` (elongated, columnar cells), with the
+  beam interrogating roughly along the cortical column (`mean_axis_projection ≈ 1`).
+  The content corner is in the beta band.
+- **`VoxelGeometry.motor_cortex_layer5()`** — the voxel at M1 layer-5 depth, with a
+  neuron count set **consistent with the large somata** (~1300, not the generic 10k —
+  large output cells are sparse; the generic count would imply a volume fraction
+  above 1).
+
+## The directional channel is the point
+
+In a generic isotropic patch the directional term is zero — a randomly-oriented
+population's vector displacements cancel, leaving only the volume-change monopole. M1
+is where that assumption breaks: the columnar layer-5 cells share an axis, so when
+they co-fire in the beta rhythm their directional contributions **add** along the
+beam. The model now sources that orientation coherence from the activity dynamics
+(`activity/orientation.py` → `reduce_to_state` → `NeuralState.orientation_coherence`)
+rather than hardcoding it, so temporal synchrony and directional alignment emerge
+together from the simulated population.
+
+See [mechanics.md](mechanics.md) for the directional-channel physics
+(`g(Q,μ) = (2/3)·Q·P₂(μ)`, the deviatoric Eshelby response) and [activity.md](activity.md)
+for how `Q_eff` emerges from the structural alignment.
+
+## Movement trials — the dynamics
+
+`run_motor_cortex()` holds M1 on a steady resting-beta cycle. `run_motor_trial()`
+imposes a **movement-locked drive** `P(t)` (`activity/motor_drive.py`): a baseline with
+a dip at movement onset and an overshoot afterwards, giving the M1 motor signature —
+
+```
+resting beta  →  movement onset: beta SUPPRESSED (synchrony desyncs)  →  beta REBOUND
+```
+
+Because the displacement `dz(t)` tracks synchrony, the **tissue displacement signal
+itself** shows the arc: it drops during movement and rebounds above baseline after.
+
+```python
+from base_neural_model import run_motor_trial, MovementProfile
+r = run_motor_trial(MovementProfile(onset_time_s=0.4, move_duration_s=0.3))
+# r.displacement_timeseries.surviving_dz  ->  baseline, desync dip, rebound
+```
+
+A modeling note: in this mean-field reduction, "synchrony" is the rhythm envelope
+gated by the population's engaged activation (`activity/timeseries.py`), so the drive
+dip that collapses activation is what desynchronizes it. That is a deliberate, stated
+proxy — a single 2-D oscillator does not have true population phase desync — chosen so
+the desync → rebound *sequence* is faithful even though the microscopic mechanism is
+abstracted. Pinned by [`test_motor_dynamics.py`](../tests/test_motor_dynamics.py).
+
+## Honest caveats
+
+- The total M1 displacement comes out **lower** than the generic model, dominated by
+  the larger cell radius (`3Δr/r` shrinks with `r`). This is a real consequence of the
+  Betz-cell size assumption, not the directional channel — and it is exactly the kind
+  of parameter trade-off the model is built to make visible rather than hide.
+- `β`, `Q_struct`, and the beam/column alignment `μ` are literature-motivated but
+  **unmeasured** at the content band — like η, they are contestable inputs the model
+  lets you sweep, not settled values.
+
+## Tests
+
+[`test_motor_cortex.py`](../tests/test_motor_cortex.py) pins the beta-band rhythm, the
+columnar alignment, the volume-fraction consistency of the sparse large cells, the
+layer-5 depth, and that the directional channel contributes in M1 while staying inert
+in the generic model.

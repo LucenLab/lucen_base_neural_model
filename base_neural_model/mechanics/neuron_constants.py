@@ -12,9 +12,9 @@ change and nothing downstream hides an alternative assumption.
 
 from __future__ import annotations
 
-from lucen.base.bands import Band, require_content_fast
-from lucen.base.provenance import Provenance
-from lucen.base.types import NeuronDisplacement
+from base_neural_model.base.bands import Band, require_content_fast
+from base_neural_model.base.provenance import Provenance
+from base_neural_model.base.types import NeuronDisplacement
 
 # --- The cited figure -----------------------------------------------------------
 # Optical / full-field interferometric measurements of action-potential-correlated

@@ -1,17 +1,18 @@
 """Invariant 3 / spec section 7.2 - band guard.
 
-Any attempt to feed an ENVELOPE_SLOW or BROADBAND displacement into the population
-summation raises. The envelope-vs-content category error is unrepresentable.
+Any attempt to feed an ENVELOPE_SLOW or BROADBAND displacement into the source
+transduction chain raises. The envelope-vs-content category error is
+unrepresentable.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from lucen.base.bands import Band, BandError, require_content_fast
-from lucen.base.provenance import Provenance
-from lucen.base.types import NeuronDisplacement
-from lucen.source import summed_displacement
+from base_neural_model import mechanical_displacement
+from base_neural_model.base.bands import Band, BandError, require_content_fast
+from base_neural_model.base.provenance import Provenance
+from base_neural_model.base.types import NeuronDisplacement
 
 
 def _neuron_with_band(band: Band) -> NeuronDisplacement:
@@ -31,14 +32,14 @@ def test_require_content_fast_rejects_non_content(band):
 
 
 @pytest.mark.parametrize("band", [Band.ENVELOPE_SLOW, Band.BROADBAND])
-def test_summed_displacement_rejects_non_content_band(band, voxel):
-    """The category error is unrepresentable at the population-summation boundary."""
+def test_source_displacement_rejects_non_content_band(band, voxel, source_params):
+    """The category error is unrepresentable at the source-chain boundary."""
     bad = _neuron_with_band(band)
     with pytest.raises(BandError):
-        summed_displacement(bad, voxel, synchrony_fraction=1.0)
+        mechanical_displacement(bad, voxel, source_params, synchrony_fraction=1.0)
 
 
-def test_summed_displacement_accepts_content_band(voxel):
+def test_source_displacement_accepts_content_band(voxel, source_params):
     good = _neuron_with_band(Band.CONTENT_FAST)
-    result = summed_displacement(good, voxel, synchrony_fraction=1.0)
+    result = mechanical_displacement(good, voxel, source_params, synchrony_fraction=1.0)
     assert result.band is Band.CONTENT_FAST

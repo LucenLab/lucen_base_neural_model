@@ -1,19 +1,41 @@
-"""Population summation: neural activity -> effective voxel displacement.
+"""Transduction chain: neural activity -> net axial voxel displacement.
 
-The summed displacement of ``N`` neurons interpolates between two limits:
+The placeholder this replaces summed single-neuron *membrane* displacements as
+collinear translations. That is a category error: surface displacements of
+randomly-arranged, radially-expanding cells have zero net translation (the
+dipole moment cancels); the surviving term is the **monopole**, the volume
+change. The interrogation beam reads the net axial *dilatation* across the gate,
+not a sum of cellular excursions.
 
-* fully coherent (``s = 1``): displacements add in phase, ``d_sum = N * d_1`` -
-  the optimistic ceiling (tens of nm);
-* fully incoherent (``s = 0``): random phases, RMS scaling, ``d_sum = sqrt(N) * d_1`` -
-  partial cancellation drives the sum toward the floor.
+The corrected chain runs through the volume change at each link (source physics
+doc, section 2)::
 
-Treating synchrony ``s`` as the fraction of neurons firing coherently, with the
-remainder incoherent, the contract this module realizes is::
+    membrane Delta r
+      -> per-cell fractional volume change   3*Delta r / r          (section 2.1)
+      -> tissue volumetric strain  eps_V = f_cell * s * (3*Delta r / r)  (2.2)
+      -> axial displacement        Delta z = eta * kappa * L * eps_V       (2.3)
 
-    d_sum(s) = d_1 * [ s*N + sqrt((1 - s)*N) ]
+Two limits the corrected coherence invariant must reproduce (section 6):
 
-This MUST reproduce ``N*d_1`` at ``s=1`` and ``sqrt(N)*d_1`` at ``s=0`` (spec
-section 3.2 - the acceptance boundary, enforced by the coherence-limits test).
+* fully coherent (``s = 1``): ``eps_V = f_cell * (3*Delta r / r)`` - the analog
+  of the placeholder's ``N*d_1`` ceiling, but a *strain*, not a heave of tens of
+  micrometres;
+* fully incoherent (``s = 0``): the coherent term vanishes and a ``1/sqrt(N)``
+  fluctuating pedestal remains - and that pedestal is *noise*, not signal.
+
+Firing-time jitter ``sigma_t`` low-passes the population signal; the content band
+is its first casualty (section 3). The output is therefore a content-band curve,
+carrying its jitter-determined survival explicitly, never a scalar.
+
+The monopole above is orientation-free (a volume change has no direction), which is
+why the isotropic chain survives a randomly-arranged population. But a real cell does
+not expand as a perfect sphere: its eigenstrain has a *deviatoric* (directional) part
+along the cell axis. That **directional channel** (``orientation.py``) adds an axial
+term that survives only when the population's axes are *aligned* - a coherence axis
+distinct from temporal synchrony ``s``. It is governed by the anisotropy fraction
+``beta`` and the orientation order parameter ``Q``, and vanishes (recovering the
+monopole-only model) when either is zero. The total axial displacement is the
+isotropic plus the directional term.
 """
 
 from __future__ import annotations
@@ -22,39 +44,93 @@ import math
 
 import numpy as np
 
-from lucen.base.bands import require_content_fast
-from lucen.base.provenance import extend
-from lucen.base.types import NeuronDisplacement, SummedDisplacement, VoxelGeometry
+from base_neural_model.base.bands import require_content_fast
+from base_neural_model.base.provenance import extend
+from base_neural_model.base.types import (
+    MechanicalDisplacement,
+    MechanicsParams,
+    NeuronDisplacement,
+    VoxelGeometry,
+)
+from base_neural_model.mechanics.orientation import (
+    directional_axial_strain,
+    orientation_provenance,
+)
 
-_INTERPOLATION_ASSUMPTION = (
-    "synchrony = fraction of neurons firing coherently; coherent fraction adds in "
-    "phase (linear), incoherent remainder adds in RMS (sqrt): "
-    "d_sum(s) = d_1 * [s*N + sqrt((1-s)*N)]"
+_CHAIN_ASSUMPTIONS = (
+    "source term is the net axial dilatation across the gate, NOT a sum of "
+    "membrane displacements (the collinear sum cancels; the monopole survives)",
+    "per-cell fractional volume change = 3*Delta r / r (uniform radial expansion "
+    "of a spherical cell)",
+    "coherent tissue strain eps_V = f_cell * s * (3*Delta r / r); the (1-s) "
+    "incoherent remainder adds in RMS as an in-band noise pedestal, not signal",
+    "axial displacement Delta z = eta * kappa * L * eps_V; kappa partitions "
+    "dilatation axially (Eshelby inclusion), eta is the net-dilatation fraction "
+    "and is the load-bearing source-side unknown routed to Stage 1",
+    "content-band survival s(f_c) = exp(-2*pi^2*f_c^2*sigma_t^2): firing jitter "
+    "is a low-pass on the population signal, extinguishing content before envelope",
 )
 
 
-def _summed_value_m(d_single_m: float, n: int, s: float) -> float:
-    """Core scalar contract. Realizes ``d_1 * [s*N + sqrt((1-s)*N)]``.
+def _fractional_volume_change(params: MechanicsParams) -> float:
+    """Per-cell fractional volume change ``3*Delta r / r`` (section 2.1)."""
+    return 3.0 * params.membrane_disp_m / params.cell_radius_m
 
-    At ``s=1`` this is exactly ``N*d_1``; at ``s=0`` exactly ``sqrt(N)*d_1``.
+
+def _volumetric_strain_coh(params: MechanicsParams, s: float) -> float:
+    """Coherent voxel volumetric strain ``f_cell * s * (3*Delta r / r)`` (2.2)."""
+    return params.cell_volume_fraction * s * _fractional_volume_change(params)
+
+
+def _volumetric_strain_incoh(params: MechanicsParams, n: int, s: float) -> float:
+    """Incoherent strain pedestal ``f_cell * sqrt((1-s)/N) * (3*Delta r / r)`` (2.2).
+
+    The cells that fire but are not phase-locked contribute a fluctuating strain
+    whose RMS scales as ``sqrt(count)``; per voxel that is the ``1/sqrt(N)``
+    floor. This lands in the detection band as *noise*, not signal.
     """
-    coherent_term = s * n
-    incoherent_term = math.sqrt((1.0 - s) * n)
-    return d_single_m * (coherent_term + incoherent_term)
+    return (
+        params.cell_volume_fraction
+        * math.sqrt((1.0 - s) / n)
+        * _fractional_volume_change(params)
+    )
 
 
-def summed_displacement(
+def _axial_from_strain(
+    eta: float, kappa: float, gate_len_m: float, eps_v: float
+) -> float:
+    """Net axial displacement ``eta * kappa * L * eps_V`` across the gate (2.3)."""
+    return eta * kappa * gate_len_m * eps_v
+
+
+def _content_band_survival(sigma_t: float, f_c: float) -> float:
+    """Jitter low-pass ``exp(-2*pi^2*f_c^2*sigma_t^2)`` at the corner (section 3).
+
+    This is the characteristic function of Gaussian firing-time jitter evaluated
+    at the content-band corner: 1 at the slow envelope, low in the content band.
+    """
+    return math.exp(-2.0 * math.pi**2 * f_c**2 * sigma_t**2)
+
+
+def mechanical_displacement(
     d_single: NeuronDisplacement,
     geom: VoxelGeometry,
+    params: MechanicsParams,
     synchrony_fraction: float,
-) -> SummedDisplacement:
-    """Compute summed voxel displacement at one synchrony value.
+) -> MechanicalDisplacement:
+    """Compute the net axial source displacement at one synchrony value.
+
+    Realizes the boxed relations of source physics doc section 2-3. The cited
+    membrane displacement ``d_single`` feeds the volume relation via
+    ``params.membrane_disp_m`` (which it must equal) - never a summation
+    (Invariant 2). The range gate ``L`` is ``geom.extent_axial_m``.
 
     Precondition: ``d_single.band is CONTENT_FAST`` (enforced; raises otherwise).
-    Postcondition: ``result.value_m`` equals ``N*d_1`` at ``s=1`` and
-    ``sqrt(N)*d_1`` at ``s=0`` (spec section 3.2).
+    Postcondition: ``volumetric_strain`` equals ``f_cell*(3*Delta r/r)`` at
+    ``s=1`` and the ``1/sqrt(N)`` incoherent floor at ``s=0`` (corrected
+    coherence invariant, section 6).
     """
-    require_content_fast(d_single.band, context="summed_displacement")
+    require_content_fast(d_single.band, context="mechanical_displacement")
 
     if not 0.0 <= synchrony_fraction <= 1.0:
         raise ValueError(
@@ -62,36 +138,99 @@ def summed_displacement(
         )
     if geom.neuron_count <= 0:
         raise ValueError(f"neuron_count must be positive, got {geom.neuron_count!r}")
+    if params.cell_radius_m <= 0.0:
+        raise ValueError(f"cell_radius_m must be positive, got {params.cell_radius_m!r}")
+    if d_single.value_m != params.membrane_disp_m:
+        raise ValueError(
+            "params.membrane_disp_m must equal the cited d_single.value_m "
+            f"({d_single.value_m!r}); the cited constant enters only here "
+            f"(Invariant 2), got {params.membrane_disp_m!r}"
+        )
 
-    value_m = _summed_value_m(
-        d_single.value_m, geom.neuron_count, synchrony_fraction
+    n = geom.neuron_count
+    s = synchrony_fraction
+    gate_len_m = geom.extent_axial_m
+
+    eps_coh = _volumetric_strain_coh(params, s)
+    eps_incoh = _volumetric_strain_incoh(params, n, s)
+
+    # Isotropic (monopole / volume-change) axial term -- the original signal.
+    axial_iso = _axial_from_strain(
+        params.dilatation_eta, params.confinement_kappa, gate_len_m, eps_coh
+    )
+    axial_incoh = _axial_from_strain(
+        params.dilatation_eta, params.confinement_kappa, gate_len_m, eps_incoh
     )
 
+    # Directional (deviatoric / orientation) axial term. It uses the deviatoric
+    # Eshelby response in place of kappa and the population orientation factor; it is
+    # zero when beta = 0 or the orientation is random (Q = 0), recovering the
+    # isotropic model exactly. Carries the same eta and gate length as the monopole.
+    eps_dir = directional_axial_strain(
+        eps_coh,
+        anisotropy=params.anisotropy,
+        order_parameter=params.orientation_coherence,
+        director_projection=params.mean_axis_projection,
+        nu=params.matrix_poisson_ratio,
+    )
+    axial_dir = params.dilatation_eta * gate_len_m * eps_dir
+
+    # The beam reads the magnitude of the total axial coherent displacement.
+    axial_total = abs(axial_iso + axial_dir)
+
+    survival = _content_band_survival(params.jitter_sigma_s, params.content_freq_hz)
+
+    chain_provenance = [*_CHAIN_ASSUMPTIONS]
+    if params.anisotropy > 0.0 and params.orientation_coherence > 0.0:
+        chain_provenance.extend(
+            orientation_provenance(
+                anisotropy=params.anisotropy,
+                order_parameter=params.orientation_coherence,
+                director_projection=params.mean_axis_projection,
+                nu=params.matrix_poisson_ratio,
+            )
+        )
     provenance = extend(
         d_single.provenance,
-        _INTERPOLATION_ASSUMPTION,
-        f"voxel neuron_count N = {geom.neuron_count}",
+        *chain_provenance,
+        f"voxel neuron_count N = {n}",
+        f"range gate L = {gate_len_m} m",
+        f"kappa = {params.confinement_kappa}, eta = {params.dilatation_eta}, "
+        f"f_cell = {params.cell_volume_fraction}, r = {params.cell_radius_m} m",
+        f"sigma_t = {params.jitter_sigma_s} s, f_c = {params.content_freq_hz} Hz",
+        f"axial decomposition: isotropic {axial_iso:.4g} m + directional "
+        f"{axial_dir:.4g} m (Q = {params.orientation_coherence})",
     )
-    return SummedDisplacement(
-        value_m=value_m,
-        synchrony_fraction=synchrony_fraction,
+    return MechanicalDisplacement(
+        axial_displacement_m=axial_total,
+        volumetric_strain=eps_coh,
+        incoherent_pedestal_m=axial_incoh,
+        synchrony_fraction=s,
+        jitter_sigma_s=params.jitter_sigma_s,
+        content_band_survival=survival,
+        confinement_kappa=params.confinement_kappa,
+        dilatation_eta=params.dilatation_eta,
         band=d_single.band,
         provenance=provenance,
+        isotropic_axial_m=axial_iso,
+        directional_axial_m=axial_dir,
+        orientation_coherence=params.orientation_coherence,
     )
 
 
-def synchrony_sweep(
+def displacement_sweep(
     d_single: NeuronDisplacement,
     geom: VoxelGeometry,
+    params: MechanicsParams,
     synchrony_grid: np.ndarray,
-) -> list[SummedDisplacement]:
+) -> list[MechanicalDisplacement]:
     """Vectorized sweep over synchrony - the primary Module 1 product.
 
-    Coherence (synchrony fraction) is the swept independent variable (Invariant 4):
-    the output is a *curve*, never a single point. ``synchrony_grid`` is e.g.
+    Coherence (synchrony fraction) is the swept independent variable (Invariant
+    4): the output is a *curve*, never a single point. ``synchrony_grid`` is e.g.
     ``np.linspace(0, 1, 51)`` and must lie within ``[0, 1]``.
     """
-    require_content_fast(d_single.band, context="synchrony_sweep")
+    require_content_fast(d_single.band, context="displacement_sweep")
 
     grid = np.asarray(synchrony_grid, dtype=float)
     if grid.ndim != 1:
@@ -101,4 +240,4 @@ def synchrony_sweep(
     if grid.min() < 0.0 or grid.max() > 1.0:
         raise ValueError("synchrony_grid values must lie within [0, 1]")
 
-    return [summed_displacement(d_single, geom, float(s)) for s in grid]
+    return [mechanical_displacement(d_single, geom, params, float(s)) for s in grid]

@@ -1,19 +1,17 @@
-"""Shared foundation for the Lucen forward model.
+"""Shared foundation for base_neural_model.
 
-Nothing in the three modules computes correctly without these: SI unit handling,
-the temporal-band guard, provenance propagation, and the typed data contracts that
-cross every module boundary (spec section 8, build step 1).
+Nothing in the activity or mechanics layers computes correctly without these: SI
+unit handling, the temporal-band guard, provenance propagation, and the typed data
+contracts that cross the activity -> mechanics -> gates boundary.
 """
 
-from lucen.base.bands import Band, require_content_fast
-from lucen.base.provenance import Provenance, extend, merge
-from lucen.base.types import (
-    ArrayGeometry,
-    DetectionResult,
-    FeasibilityCurve,
+from base_neural_model.base.bands import Band, require_content_fast
+from base_neural_model.base.provenance import Provenance, extend, merge
+from base_neural_model.base.types import (
+    MechanicalDisplacement,
+    MechanicsParams,
+    NeuralState,
     NeuronDisplacement,
-    PropagatedDisplacement,
-    SummedDisplacement,
     VoxelGeometry,
 )
 
@@ -25,9 +23,7 @@ __all__ = [
     "extend",
     "NeuronDisplacement",
     "VoxelGeometry",
-    "SummedDisplacement",
-    "PropagatedDisplacement",
-    "DetectionResult",
-    "FeasibilityCurve",
-    "ArrayGeometry",
+    "MechanicsParams",
+    "MechanicalDisplacement",
+    "NeuralState",
 ]
