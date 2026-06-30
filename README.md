@@ -1,10 +1,11 @@
 # base_neural_model
 
-A comprehensive model of **what neural activity is and what mechanical signal it
-produces in tissue** — a dynamical neural-activity layer feeding a biophysical
-transduction chain, stopping *before* any sensing, ultrasound, or detection.
+A comprehensive model of **what neural activity is, what mechanical signal it produces
+in tissue, and whether a conventional ultrasound system can detect it** — a dynamical
+neural-activity layer feeding a biophysical transduction chain, then composed with an
+acoustic detection layer at the explicit source/sensing seam.
 
-Two layers, one pipeline:
+Three layers, one pipeline:
 
 1. **Activity** — a Wilson–Cowan excitatory/inhibitory **neural-mass model**
    integrated over time (`scipy`), producing firing, oscillations, and population
@@ -13,19 +14,30 @@ Two layers, one pipeline:
 2. **Mechanics** — the transduction chain membrane Δr → per-cell volume change →
    tissue strain ε_V → **net axial dilatation Δz**, with the Eshelby confinement
    factor κ and the poroelastic dilatation fraction η.
+3. **Forward** — the source/sensing seam: Δz composed with a conventional
+   phase-sensitive ultrafast-ultrasound acquisition (within-epoch √N integration +
+   the through-skull Walker–Trahey detection floor) into a Gate-A / Stage-1
+   detectability verdict. The first three layers stop *before* sensing; this one
+   crosses the boundary, and is opt-in so they stay untouched without it.
 
-It produces **two deliverables**: an activity-driven displacement **timeseries
+It produces the **source deliverables** — an activity-driven displacement **timeseries
 `dz(t)`** with its content-band spectrum, and the **static tissue displacement from a
-neural state** with its full decomposition.
+neural state** with its full decomposition — and, when an acquisition is supplied, the
+**detectability verdict** (SNR vs the derived through-skull floor).
 
 ```python
-from base_neural_model.model import run_neural_model
+from base_neural_model.model import run_neural_model, run_motor_demo
 
 r = run_neural_model()
 r.neural_state.synchrony_fraction       # s, from the Kuramoto order parameter
 r.displacement_timeseries.peak_dz_m     # (a) the dz(t) timeseries peak
 r.mechanical_displacement.value_m       # (b) the static dz(neural_state)
 r.all_gates_pass                        # the three kill gates
+
+# Opt into the acoustic detection layer (Gate A / Stage 1):
+d = run_motor_demo().detection          # sustained motor imagery → detectability
+d.snr_db                                # SNR vs the derived through-skull floor (≈ −2 dB)
+d.limiting_denominator                  # "echo_snr" | "clutter"
 ```
 
 See [`docs/architecture.md`](docs/architecture.md) — **start here.**
@@ -45,7 +57,11 @@ See [`docs/architecture.md`](docs/architecture.md) — **start here.**
    then swept through the mechanics — never asserted by hand.
 5. **Every gate scores against a kill criterion** (`passes_*_gate`).
 6. **Provenance propagates** ([`base/provenance.py`](base_neural_model/base/provenance.py))
-   from the cited constant and the E/I parameters to both deliverables.
+   from the cited constant and the E/I parameters to every deliverable.
+7. **Source and sensing are separated.** `activity`/`mechanics`/`model` are pure source
+   physics; all ultrasound/detection lives in `forward/` and is opt-in
+   (`run_neural_model(acquisition=…)`). Absent an acquisition, the source model is
+   unchanged — no sensing assumption leaks into the source verdict.
 
 ## Layout
 
@@ -55,6 +71,8 @@ base_neural_model/
   activity/      the dynamical neural-mass layer (E/I ODEs → synchrony, NeuralState)
   mechanics/     the transduction chain: neural state → net axial tissue displacement
   model/         the end-to-end model, the three kill gates, the inverse analyses
+  forward/       the source/sensing seam: √N integration + the through-skull
+                 detection floor (detection.py) and the acoustic budget sweep (budget.py)
 tests/           invariant + layer tests
 scripts/         live figures (matplotlib) recomputed from the model
 docs/            subsystem-by-subsystem architecture docs
@@ -121,5 +139,13 @@ displacement that activity generates — both as a timeseries `dz(t)` and as a s
 displacement from a reduced neural state — decomposed to its biophysical factors
 (Eshelby κ, poroelastic η, content-band survival), scored against three kill gates,
 and shown (via Sobol sensitivity and verdict-flip) to collapse onto the net-dilatation
-fraction η and the activity drive that sets synchrony. It deliberately stops before
-any sensing modality: it is a neural model, not a detector.
+fraction η and the activity drive that sets synchrony.
+
+The opt-in `forward/` layer then carries that source displacement across the
+source/sensing seam to the **Gate-A / Stage-1 detectability question**: with within-epoch
+√N coherent integration and the through-skull Walker–Trahey floor, the conservative
+motor-imagery baseline lands ≈ −2 dB — within an order of the detection floor, the
+specs' engineering-sized gap — and the acoustic budget sweep
+([`forward/budget.py`](base_neural_model/forward/budget.py)) shows the verdict collapses
+onto skull loss and the integration window. The detection layer is opt-in: without an
+acquisition the build is purely a neural source model, not a detector.
