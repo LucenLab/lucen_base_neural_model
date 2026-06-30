@@ -24,6 +24,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from _bands import BANDS
 
 from base_neural_model import get_single_neuron_displacement
 from base_neural_model.base.types import MechanicsParams, VoxelGeometry
@@ -31,7 +32,7 @@ from base_neural_model.mechanics.transduction import mechanical_displacement
 
 _D1 = get_single_neuron_displacement()
 _VOXEL = VoxelGeometry(
-    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=10_000, depth_m=2e-2
+    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=21_000, depth_m=2e-2
 )
 
 # Content-band corners to draw (Hz). 100 Hz is the model's central content corner.
@@ -78,15 +79,22 @@ def build_figure():
         ax0.plot(sigma_ms, surv, lw=2, label=f"f_c = {f_c:.0f} Hz")
 
     # Mark each tier's jitter as a vertical guide + the survival it reaches at 100 Hz.
+    # Labels are placed with a leader line into clear space below-right of each dot, so
+    # the near-coincident high-survival tiers (0.3 / 0.5 ms) do not overprint each other
+    # or the title.
     for name, sigma_t, colour in _TIER_JITTER:
         x = sigma_t * 1e3
         y = _survival(sigma_t, 100.0)
         ax0.axvline(x, color=colour, ls=":", lw=1.3, alpha=0.8)
         ax0.plot([x], [y], "o", color=colour, ms=7, zorder=5)
+        # Drop each label to a staggered height well below the y=1 ceiling.
+        y_text = {"unarguable": 0.72, "optimistic": 0.60, "central": 0.48,
+                  "pessimistic": 0.30}.get(name, y - 0.1)
         ax0.annotate(
             f"{name}\n{y:.2f}",
-            xy=(x, y), xytext=(x + 0.12, y + 0.04),
-            fontsize=8, color=colour, fontweight="bold",
+            xy=(x, y), xytext=(x + 0.08, y_text),
+            fontsize=7.5, color=colour, fontweight="bold", ha="left",
+            arrowprops=dict(arrowstyle="-", color=colour, lw=0.8, alpha=0.6),
         )
 
     # Anchor the LIVE operating point: the (sigma_t, survival) a real model run sits
@@ -98,10 +106,12 @@ def build_figure():
     y_live = _survival(state.jitter_sigma_s, state.content_freq_hz)
     ax0.plot([x_live], [y_live], "*", color="#1f3b73", ms=16, zorder=6,
              label=f"live run (f_c={state.content_freq_hz:.0f} Hz)")
+    # Callout placed below-right of the star (clear mid-panel area), pointing up-left.
     ax0.annotate(
-        f"{y_live*100:.0f}% survives\nat f_c={state.content_freq_hz:.0f} Hz",
-        xy=(x_live, y_live), xytext=(x_live + 0.3, y_live + 0.12),
-        fontsize=8.5, color="#1f3b73", fontweight="bold",
+        f"live run: {y_live*100:.0f}% survives\nat f_c={state.content_freq_hz:.0f} Hz, "
+        f"sigma_t={x_live:.1f} ms",
+        xy=(x_live, y_live), xytext=(x_live + 0.45, y_live - 0.22),
+        fontsize=8, color="#1f3b73", fontweight="bold",
         arrowprops=dict(arrowstyle="->", color="#1f3b73"),
     )
 
@@ -114,8 +124,10 @@ def build_figure():
     ax0.grid(alpha=0.3)
 
     # --- Panel 2: (sigma_t, f_c) survival heatmap ------------------------------
+    # f_c is bounded to the beta-gamma range the model actually occupies (the rhythm
+    # corners sit at 17-39 Hz), so the relevant region is not squashed against the axis.
     sig = np.linspace(0.05, 4.0, 200) * 1e-3   # avoid the trivial sigma=0 line
-    fcs = np.linspace(10.0, 300.0, 200)
+    fcs = np.linspace(10.0, 120.0, 200)
     SIG, FC = np.meshgrid(sig, fcs)
     surv = np.vectorize(_survival)(SIG, FC)
 
@@ -133,15 +145,20 @@ def build_figure():
     )
     ax1.clabel(cs, fmt="%.2f", fontsize=7)
 
-    # The content band (the target) and each tier's jitter line.
-    ax1.axhline(100.0, color="cyan", ls="--", lw=1.2)
-    ax1.text(3.6, 108, "content corner  f_c=100 Hz", color="cyan", fontsize=8, ha="right")
+    # Mark each rhythm band's real content corner as a horizontal line.
+    for band in BANDS:
+        ax1.axhline(band.f_c_hz, color=band.colour, ls="--", lw=1.3)
+        short = band.label.split()[0]
+        ax1.text(0.1, band.f_c_hz + 1.2, f"{short}  f_c={band.f_c_hz:.0f}Hz",
+                 color=band.colour, fontsize=7.5, ha="left", va="bottom",
+                 fontweight="bold")
     for _name, sigma_t, colour in _TIER_JITTER:
-        ax1.axvline(sigma_t * 1e3, color=colour, ls=":", lw=1.1, alpha=0.7)
+        ax1.axvline(sigma_t * 1e3, color=colour, ls=":", lw=1.0, alpha=0.5)
 
+    ax1.set_ylim(10.0, 120.0)
     ax1.set_xlabel("firing-time jitter  sigma_t  (ms)")
     ax1.set_ylabel("content-band corner  f_c  (Hz)")
-    ax1.set_title("2. Faster content + more jitter both crush survival")
+    ax1.set_title("2. The rhythm corners (17-39 Hz) on the jitter low-pass")
 
     return fig
 

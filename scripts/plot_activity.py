@@ -20,17 +20,26 @@ from pathlib import Path
 
 from base_neural_model.activity import run_activity
 from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
+from base_neural_model.activity.populations import EIParams
+
+# The three cited rhythm presets, by band.
+_PRESETS = {
+    "gamma": (EIParams.central, "generic cortex, gamma"),
+    "high-beta": (EIParams.motor_cortex, "M1, high-beta"),
+    "low-beta": (EIParams.motor_cortex_low_beta, "M1, low-beta"),
+}
 
 
-def build_figure():
+def build_figure(*, preset: str = "gamma"):
     import matplotlib.pyplot as plt
 
-    ts = run_activity()
+    ei_factory, label = _PRESETS[preset]
+    ts = run_activity(ei_factory())
     spec = ts.spectrum
 
     fig = plt.figure(figsize=(14, 4.6), constrained_layout=True)
     fig.suptitle(
-        "Dynamical activity layer   "
+        f"Dynamical activity layer ({label})   "
         f"f_c = {spec.dominant_freq_hz:.1f} Hz   "
         f"mean synchrony s = {ts.mean_synchrony:.2f}",
         fontsize=13, fontweight="bold",
@@ -81,6 +90,8 @@ def build_figure():
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-o", "--output", type=Path, default=Path("plots/activity.png"))
+    parser.add_argument("--preset", choices=tuple(_PRESETS), default="gamma",
+                        help="rhythm preset (gamma | high-beta | low-beta)")
     parser.add_argument("--show", action="store_true", help="also open a window")
     parser.add_argument("--dpi", type=int, default=150)
     args = parser.parse_args()
@@ -91,7 +102,7 @@ def main() -> None:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig = build_figure()
+    fig = build_figure(preset=args.preset)
     fig.savefig(args.output, dpi=args.dpi, bbox_inches="tight")
     print(f"wrote {args.output.resolve()}")
     if args.show:

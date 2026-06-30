@@ -20,13 +20,24 @@ from pathlib import Path
 
 from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.base.units import m_to_nm
-from base_neural_model.model import run_neural_model
+from base_neural_model.model.run import run_motor_cortex, run_neural_model
 
 
-def build_figure():
+def _report_for(preset: str):
+    """Full-chain report for a rhythm preset (the right voxel/mechanics per region)."""
+    if preset == "gamma":
+        return run_neural_model(), "generic cortex, gamma"
+    if preset == "high-beta":
+        return run_motor_cortex(), "M1, high-beta"
+    if preset == "low-beta":
+        return run_motor_cortex(low_beta=True), "M1, low-beta"
+    raise ValueError(f"unknown preset {preset!r}")
+
+
+def build_figure(*, preset: str = "gamma"):
     import matplotlib.pyplot as plt
 
-    report = run_neural_model()
+    report, label = _report_for(preset)
     ts = report.displacement_timeseries
     spec = report.spectrum
     state = report.neural_state
@@ -39,7 +50,7 @@ def build_figure():
 
     fig = plt.figure(figsize=(14, 4.6), constrained_layout=True)
     fig.suptitle(
-        "Activity-driven tissue displacement   "
+        f"Activity-driven tissue displacement ({label})   "
         f"s = {state.synchrony_fraction:.2f}   f_c = {state.content_freq_hz:.1f} Hz   "
         f"predicted dz = {surviving_nm:.2f} nm  "
         f"(coherent {coherent_nm:.2f} nm x {survival_pct:.0f}% jitter survival)",
@@ -86,6 +97,9 @@ def build_figure():
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-o", "--output", type=Path, default=Path("plots/dz_t.png"))
+    parser.add_argument("--preset", choices=("gamma", "high-beta", "low-beta"),
+                        default="gamma",
+                        help="rhythm preset (gamma | high-beta | low-beta)")
     parser.add_argument("--show", action="store_true", help="also open a window")
     parser.add_argument("--dpi", type=int, default=150)
     args = parser.parse_args()
@@ -96,7 +110,7 @@ def main() -> None:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig = build_figure()
+    fig = build_figure(preset=args.preset)
     fig.savefig(args.output, dpi=args.dpi, bbox_inches="tight")
     print(f"wrote {args.output.resolve()}")
     if args.show:

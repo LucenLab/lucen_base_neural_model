@@ -3,12 +3,12 @@
 Built on ``min_resolution`` (base_neural_model.model.resolution) -- the inverse of the
 pass-space question. For each (eta, s) it solves for the smallest voxel (fewest
 neurons, at fixed cell density) that still clears all three gates, and reports that as
-a neuron count and
-an equivalent voxel-edge shrink. The headline question -- "instead of 10k, can we hit
-5k (or finer)?" -- is read straight off these surfaces, whose contour ladder runs from
-the 10k baseline down to the finest feasible voxel.
+a neuron count and an equivalent voxel-edge shrink. The headline question -- "can we
+shrink the voxel to capture fewer neurons but resolve finer detail, and what stops us?"
+-- is read straight off these surfaces, whose contour ladder runs from the 21k baseline
+down to the finest feasible voxel.
 
-Two limits set that finest voxel, and the figure shows both:
+Two CELLULAR limits set that finest voxel (panels 1-2):
 
 * the **gate** limit -- shrinking lowers the coherent signal (~rho) AND raises the
   source's own sqrt(N) noise pedestal (~rho^-1/2), so a finite gate limit exists; and
@@ -17,6 +17,12 @@ Two limits set that finest voxel, and the figure shows both:
   statistics hold. Wherever the gates would allow a finer voxel, this floor is what
   binds (hatched in panel 1, "density floor" in panels 2-3). The reported limit is the
   binding one of the two: a conservative, buildable resolution, not a gate artifact.
+
+Panel 3 then sets the cellular shrink against the **acoustic** diffraction limit
+(lambda/2, a Module-2 constraint), split by rhythm band. The interesting finding: over
+much of the favorable regime the cellular signal would permit a voxel FINER than
+ultrasound can resolve, so the true resolution ceiling there is acoustic, not cellular
+-- shrinking to capture fewer neurons buys real resolution only down to lambda/2.
 
 Run::
 
@@ -32,6 +38,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from _bands import BANDS
 
 from base_neural_model import (
     DEFAULT_MIN_NEURON_FLOOR,
@@ -43,13 +50,32 @@ from base_neural_model.base.types import MechanicsParams, VoxelGeometry
 FLOOR_M = 1e-9
 LOW_JITTER_S = 0.2e-3
 
+# Acoustic diffraction limit: the finest voxel ULTRASOUND can resolve is ~lambda/2 =
+# c / (2 f). Soft-tissue speed of sound ~1540 m/s. This is a Module-2 limit, drawn here
+# to show where the *cellular* (Module-1) shrink runs past what the beam can resolve --
+# below these lines, the signal would permit a finer voxel than the wavelength allows.
+_C_SOUND_M_S = 1540.0
+_ACOUSTIC_MHZ = (2.0, 3.0, 5.0)  # representative imaging frequencies
+
+
+def _acoustic_half_lambda_um(f_mhz: float) -> float:
+    """Finest acoustically-resolvable voxel edge (lambda/2) in um at f (MHz)."""
+    return (_C_SOUND_M_S / (f_mhz * 1e6)) / 2.0 * 1e6
+
+
 _D1 = get_single_neuron_displacement()
 _BASE_VOXEL = VoxelGeometry(
-    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=10_000, depth_m=2e-2
+    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=21_000, depth_m=2e-2
 )
 _N0 = _BASE_VOXEL.neuron_count
 # Baseline voxel edge (lateral) in micrometres, for the resolution readout.
 _EDGE0_UM = _BASE_VOXEL.extent_lateral_m * 1e6
+
+
+def _edge_um(n: int) -> float:
+    """Voxel lateral edge (um) for a neuron count, at fixed density: edge ~ N^(1/3)."""
+    return _EDGE0_UM * (n / _N0) ** (1.0 / 3.0)
+
 
 # Gates colour key for the limiting-gate panel.
 _GATE_CODES = {
@@ -66,18 +92,21 @@ _GATE_LABELS = [
 ]
 
 
-def _params(eta: float) -> MechanicsParams:
-    return replace(
+def _params(eta: float, *, band=None) -> MechanicsParams:
+    p = replace(
         MechanicsParams.central(),
         membrane_disp_m=_D1.value_m,
         dilatation_eta=eta,
         jitter_sigma_s=LOW_JITTER_S,
     )
+    if band is not None:
+        p = replace(p, content_freq_hz=band.f_c_hz, jitter_sigma_s=band.sigma_t_s)
+    return p
 
 
-def _limit(eta: float, s: float, *, estimate_floor_m: float = FLOOR_M):
+def _limit(eta: float, s: float, *, estimate_floor_m: float = FLOOR_M, band=None):
     return min_resolution(
-        _D1, _BASE_VOXEL, _params(eta), s,
+        _D1, _BASE_VOXEL, _params(eta, band=band), s,
         floor_m=FLOOR_M, estimate_floor_m=estimate_floor_m,
     )
 
@@ -120,7 +149,7 @@ def build_figure():
     cbar = fig.colorbar(im, ax=ax0, pad=0.02)
     cbar.set_label("min neurons to pass  (log; fewer = finer resolution)")
 
-    # Contour ladder from the 10k baseline down toward the finest feasible voxel.
+    # Contour ladder from the baseline down toward the finest feasible voxel.
     # Log-spaced decade lines (the feasible range spans several decades), plus the 5k
     # target and the global minimum N (the finest feasible voxel on the plane) drawn as
     # its own contour -- all read from the surface, nothing hardcoded. With the
@@ -145,7 +174,7 @@ def build_figure():
 
     def _fmt(v: float) -> str:
         if v == _N0:
-            return "10k baseline"
+            return f"{_N0 // 1000}k baseline"
         if v == finest_n:
             return f"floor = {finest_n}"
         if v == 5_000:
@@ -198,40 +227,51 @@ def build_figure():
     ax1.set_ylabel("dilatation fraction  eta")
     ax1.set_title("2. Which gate would bind (density floor lifted, est. floor relaxed)")
 
-    # --- Panel 3: min-N vs s at a few eta, with 10k/5k guides ------------------
+    # --- Panel 3: finest voxel EDGE vs s, by band, against the acoustic limit ---
+    # The voxel-shrink question made direct: smaller voxel = fewer neurons = finer
+    # spatial resolution. We plot the finest feasible voxel *edge* (um) the cellular
+    # signal permits, per rhythm band, at a favorable eta=1.0 -- and overlay the
+    # ultrasound diffraction limit (lambda/2). Where the cellular curve drops BELOW an
+    # acoustic line, the signal would allow a finer voxel than the beam can resolve: the
+    # binding constraint flips from cellular (Module 1) to acoustic (Module 2).
+    eta_fixed = 1.0
     s_line = np.linspace(0.05, 1.0, 60)
-    for eta, colour in ((0.25, "#8e44ad"), (0.5, "#2980b9"), (1.0, "#16a085")):
-        counts = []
+    for band in BANDS:
+        edges, gates = [], []
         for s in s_line:
-            lim = _limit(eta, float(s))
-            counts.append(lim.min_neuron_count if lim.feasible else np.nan)
-        ax2.plot(s_line, counts, lw=2, color=colour, label=f"eta = {eta}")
+            lim = _limit(eta_fixed, float(s), band=band)
+            edges.append(_edge_um(lim.min_neuron_count) if lim.feasible else np.nan)
+            gates.append(lim.limiting_gate)
+        ax2.plot(s_line, edges, lw=2.4, color=band.colour,
+                 label=f"{band.label}: f_c={band.f_c_hz:.0f}Hz")
 
-    ax2.axhline(_N0, color="red", ls="--", lw=1.4)
-    ax2.axhline(5_000, color="black", ls=":", lw=1.4)
-    ax2.axhline(DEFAULT_MIN_NEURON_FLOOR, color="cyan", ls="-", lw=1.6)
-    ax2.text(0.06, _N0 * 1.05, "10k baseline", color="red", fontsize=8)
-    ax2.text(0.06, 5_000 * 1.05, "5k target", color="black", fontsize=8)
-    ax2.text(0.06, DEFAULT_MIN_NEURON_FLOOR * 1.05,
-             f"density floor ({DEFAULT_MIN_NEURON_FLOOR})", color="#0aa", fontsize=8)
+    # The cellular statistical floor as an edge (the density-floor plateau).
+    floor_edge = _edge_um(DEFAULT_MIN_NEURON_FLOOR)
+    ax2.axhline(floor_edge, color="0.3", ls="-", lw=1.4)
+    ax2.text(0.97, floor_edge * 1.02,
+             f"cellular density floor ({DEFAULT_MIN_NEURON_FLOOR} cells, "
+             f"{floor_edge:.0f} um)", color="0.2", fontsize=7.5, ha="right", va="bottom")
+    # The baseline voxel edge.
+    ax2.axhline(_EDGE0_UM, color="red", ls="--", lw=1.2)
+    ax2.text(0.05, _EDGE0_UM * 0.96, f"baseline {_EDGE0_UM:.0f} um (N={_N0:,})",
+             color="red", fontsize=7.5, va="top")
+
+    # The acoustic diffraction limits (Module 2): below these the beam cannot resolve.
+    for f_mhz in _ACOUSTIC_MHZ:
+        y = _acoustic_half_lambda_um(f_mhz)
+        ax2.axhline(y, color="#2980b9", ls=":", lw=1.3)
+        ax2.text(0.05, y * 1.02, f"acoustic limit @ {f_mhz:.0f} MHz "
+                 f"(lambda/2={y:.0f} um)", color="#2980b9", fontsize=7, va="bottom")
+
     ax2.set_yscale("log")
+    ax2.set_ylim(floor_edge * 0.8, _EDGE0_UM * 1.3)
+    ax2.set_xlim(0, 1)
     ax2.set_xlabel("synchrony  s")
-    ax2.set_ylabel("min neurons to pass  (log)")
-    ax2.set_title("3. Curves bottom out at the density floor (cyan), not at zero")
-    ax2.legend(loc="upper right", fontsize=9)
+    ax2.set_ylabel("finest feasible voxel edge  (um, log)")
+    ax2.set_title(f"3. Voxel shrink vs the acoustic limit (eta={eta_fixed})")
+    ax2.legend(loc="upper right", fontsize=7.5, title="cellular limit, by band",
+               framealpha=0.95)
     ax2.grid(alpha=0.3, which="both")
-
-    # Twin axis: translate neuron count -> voxel edge (um) at fixed density.
-    # edge = edge0 * (N / N0)^(1/3).
-    ax2b = ax2.twinx()
-    ax2b.set_yscale("log")
-    ax2b.set_ylim(*ax2.get_ylim())
-    yt = np.array([100, 1_000, 5_000, 10_000])
-    yt = yt[(yt >= ax2.get_ylim()[0]) & (yt <= ax2.get_ylim()[1])]
-    ax2b.set_yticks(yt)
-    ax2b.set_yticklabels([f"{_EDGE0_UM * (v / _N0) ** (1 / 3):.0f}" for v in yt],
-                         fontsize=8)
-    ax2b.set_ylabel("equiv. voxel edge (um)", fontsize=9)
 
     return fig
 

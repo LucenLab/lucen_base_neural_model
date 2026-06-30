@@ -20,12 +20,32 @@ one model run, following neural activity to a predicted nanometre displacement:
    vs the incoherent pedestal, and before vs after the jitter low-pass.
 
 ```bash
-uv run python scripts/plot_neural_summary.py            # generic cortex
-uv run python scripts/plot_neural_summary.py --motor    # motor cortex (M1)
+uv run python scripts/plot_neural_summary.py                       # generic cortex (gamma, ~40 Hz)
+uv run python scripts/plot_neural_summary.py --motor               # M1 high-beta (~21 Hz)
+uv run python scripts/plot_neural_summary.py --motor --low-beta    # M1 low-beta  (~17 Hz)
 ```
 
-`neural_summary_motor.png` is the M1 variant: beta rhythm, an active directional
-channel (the columnar Betz-cell contribution), and the sparse large-cell count.
+`neural_summary_motor.png` (high-beta) and `neural_summary_motor_low_beta.png`
+(low-beta) are the M1 variants: a beta rhythm, an active directional channel (the
+columnar Betz-cell contribution), and the sparse large-cell count. The generic preset
+is now a genuine gamma column (~40 Hz); see the rhythm-preset citations in
+`base_neural_model/activity/populations.py` (Buzsaki & Wang 2012; Baker 2007; Kilavik
+et al. 2013).
+
+### Rhythm-preset variants
+
+`plot_activity.py` and `plot_displacement_timeseries.py` take a `--preset` flag
+(`gamma` | `high-beta` | `low-beta`), so the activity and dz(t) figures can be
+rendered for any of the three rhythms:
+
+```bash
+uv run python scripts/plot_activity.py --preset low-beta -o plots/activity_low_beta.png
+uv run python scripts/plot_displacement_timeseries.py --preset low-beta -o plots/dz_t_low_beta.png
+```
+
+Generated band variants: `activity_high_beta.png`, `activity_low_beta.png`,
+`dz_t_high_beta.png`, `dz_t_low_beta.png` (the unsuffixed `activity.png` / `dz_t.png`
+are the gamma defaults).
 
 ## The other figures
 

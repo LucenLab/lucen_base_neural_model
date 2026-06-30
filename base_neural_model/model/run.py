@@ -51,8 +51,13 @@ from base_neural_model.model.gates import (
 )
 
 # A representative mm-scale cortical voxel (matches the repo's central voxel).
+# N = 21,000 is the count that reconciles with MechanicsParams.central()'s asserted
+# f_cell = 0.15 at r = 8 um (f_cell = N * V_cell / V_voxel = 0.150), and it sits in the
+# literature density range (cortical ~40-100k neurons/mm^3, Herculano-Houzel 2009 ->
+# ~12-30k in this 0.3 nL voxel). The earlier N=10,000 implied f_cell~0.072, a silent 2x
+# inconsistency with the central preset (see check_volume_fraction_consistency).
 DEFAULT_VOXEL = VoxelGeometry(
-    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=10_000, depth_m=2e-2
+    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=21_000, depth_m=2e-2
 )
 
 # Unaberrated displacement floor the amplitude gate scores against (metres).

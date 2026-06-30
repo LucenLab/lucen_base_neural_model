@@ -29,11 +29,16 @@ def source_params(d_single):
 
 @pytest.fixture
 def voxel():
-    """A representative mm-scale speech-cortex voxel."""
+    """A representative mm-scale speech-cortex voxel.
+
+    N = 21,000 reconciles with ``MechanicsParams.central()``'s asserted f_cell = 0.15
+    at r = 8 um (and matches literature cortical density); the earlier 10,000 implied
+    f_cell ~ 0.072, inconsistent with the central preset.
+    """
     return VoxelGeometry(
         extent_axial_m=3e-4,
         extent_lateral_m=1e-3,
-        neuron_count=10_000,
+        neuron_count=21_000,
         depth_m=2e-2,
     )
 

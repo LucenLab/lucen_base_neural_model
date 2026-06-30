@@ -32,6 +32,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from _bands import BANDS, IDEALIZED
 
 from base_neural_model import (
     get_single_neuron_displacement,
@@ -47,7 +48,7 @@ GZERO_MU = 1.0 / np.sqrt(3.0)  # the g(Q, mu) = 0 boundary (P2(mu) = 0)
 
 _D1 = get_single_neuron_displacement()
 _VOXEL = VoxelGeometry(
-    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=10_000, depth_m=2e-2
+    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=21_000, depth_m=2e-2
 )
 # A weak source (low eta) so the directional channel is what carries the verdict.
 _BASE = replace(
@@ -61,10 +62,17 @@ _BASE = replace(
 )
 
 
-def _star_vs_synchrony(solver, s_grid, *, mu=1.0):
-    """value*(s) at alignment mu; NaN where infeasible (no value passes)."""
+def _star_vs_synchrony(solver, s_grid, *, mu=1.0, band=None):
+    """value*(s) at alignment mu; NaN where infeasible (no value passes).
+
+    With ``band`` given, the content corner and jitter are set to that rhythm's real
+    operating point (Gate-2 low-pass in force); otherwise the idealized low jitter.
+    """
     out = np.full(s_grid.shape, np.nan)
     params = replace(_BASE, mean_axis_projection=mu)
+    if band is not None:
+        params = replace(params, content_freq_hz=band.f_c_hz,
+                         jitter_sigma_s=band.sigma_t_s)
     for i, s in enumerate(s_grid):
         res = solver(_D1, _VOXEL, params, float(s), floor_m=FLOOR_M)
         if res.feasible:
@@ -87,28 +95,37 @@ def _star_vs_mu(solver, mu_grid, *, s=FIXED_S):
 
 def _panel_vs_synchrony(ax, solver, label):
     s_grid = np.linspace(0.0, 1.0, 161)
+
+    # Idealized reference (tight jitter) as the shaded PASS/FAIL backdrop.
     star = _star_vs_synchrony(solver, s_grid)
     feasible = ~np.isnan(star)
-
     if feasible.any():
-        ax.plot(s_grid[feasible], star[feasible], color="#1f3b73", lw=2.5,
-                label=f"{label}*(s) -- bench bar", zorder=5)
+        ax.plot(s_grid[feasible], star[feasible], color="0.4", lw=1.8, ls="--",
+                label=f"{IDEALIZED.label}", zorder=4)
         ax.fill_between(s_grid[feasible], star[feasible], 1.0, color="#a3d9a5",
-                        alpha=0.5, label=f"PASS ({label} above bar)")
+                        alpha=0.4, label=f"PASS ({label} above bar)")
         ax.fill_between(s_grid[feasible], 0.0, star[feasible], color="#f5b7b1",
-                        alpha=0.5, label=f"FAIL ({label} below bar)")
+                        alpha=0.4, label=f"FAIL ({label} below bar)")
         s_min = float(s_grid[feasible][0])
         if s_min > 0:
             ax.axvspan(0.0, s_min, color="0.85", alpha=0.7)
             ax.text(s_min / 2, 0.5, "infeasible\n(even max\ndirectional)",
                     fontsize=7, color="0.3", ha="center", va="center")
 
+    # The band-split: each rhythm's real (f_c, sigma_t) lifts the directional bench bar.
+    for band in BANDS:
+        curve = _star_vs_synchrony(solver, s_grid, band=band)
+        feas = ~np.isnan(curve)
+        if feas.any():
+            ax.plot(s_grid[feas], curve[feas], lw=2.2, color=band.colour, zorder=5,
+                    label=f"{band.label}: f_c={band.f_c_hz:.0f}Hz")
+
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_xlabel("synchrony  s")
     ax.set_ylabel(f"minimum  {label}*")
-    ax.set_title(f"{label}*(s)  (aligned to beam, mu=1)")
-    ax.legend(loc="upper right", fontsize=7.5, framealpha=0.9)
+    ax.set_title(f"{label}*(s)  (aligned to beam, mu=1), by band")
+    ax.legend(loc="upper right", fontsize=6.8, framealpha=0.9)
     ax.grid(alpha=0.3)
 
 

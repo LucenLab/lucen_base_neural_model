@@ -27,6 +27,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+from _bands import BANDS, IDEALIZED
 
 from base_neural_model import (
     displacement_sweep,
@@ -52,17 +53,29 @@ LOW_JITTER_S = 0.2e-3    # low jitter so Gate 2 is alive across the plane
 
 _D1 = get_single_neuron_displacement()
 _VOXEL = VoxelGeometry(
-    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=10_000, depth_m=2e-2
+    extent_axial_m=3e-4, extent_lateral_m=1e-3, neuron_count=21_000, depth_m=2e-2
 )
 
 
-def _params_at(eta: float) -> MechanicsParams:
-    """Central-column params with the dilatation fraction set to ``eta``."""
+def _params_at(eta: float, *, band=None) -> MechanicsParams:
+    """Central-column params at dilatation ``eta``.
+
+    With ``band`` given, the content corner and jitter are set to that rhythm's real
+    operating point (Gate-2 low-pass in force); otherwise the idealized low jitter.
+    """
+    if band is None:
+        return replace(
+            MechanicsParams.central(),
+            membrane_disp_m=_D1.value_m,
+            dilatation_eta=eta,
+            jitter_sigma_s=LOW_JITTER_S,
+        )
     return replace(
         MechanicsParams.central(),
         membrane_disp_m=_D1.value_m,
         dilatation_eta=eta,
-        jitter_sigma_s=LOW_JITTER_S,
+        jitter_sigma_s=band.sigma_t_s,
+        content_freq_hz=band.f_c_hz,
     )
 
 
@@ -75,9 +88,11 @@ def _all_gates(sweep, *, floor=FLOOR_M, est=FLOOR_M, reach=2.0) -> bool:
     )
 
 
-def _cell_passes(eta: float, s: float) -> bool:
+def _cell_passes(eta: float, s: float, *, band=None) -> bool:
     """Three-gate verdict at a single (eta, s) point."""
-    return _all_gates(displacement_sweep(_D1, _VOXEL, _params_at(eta), np.array([s])))
+    return _all_gates(
+        displacement_sweep(_D1, _VOXEL, _params_at(eta, band=band), np.array([s]))
+    )
 
 
 def _margin(eta: float, s: float) -> float:
@@ -86,10 +101,10 @@ def _margin(eta: float, s: float) -> float:
     return out.axial_displacement_m / FLOOR_M
 
 
-def _crossover_s(eta: float, s_fine: np.ndarray) -> float | None:
+def _crossover_s(eta: float, s_fine: np.ndarray, *, band=None) -> float | None:
     """Smallest s passing all three gates at this eta (None if none does)."""
     for s in s_fine:
-        if _cell_passes(eta, float(s)):
+        if _cell_passes(eta, float(s), band=band):
             return float(s)
     return None
 
@@ -189,18 +204,30 @@ def build_figure():
     ax0.set_title("1. The pass-region: more of either knob never hurts")
     ax0.legend(loc="lower left", fontsize=8, framealpha=0.85)
 
-    # --- Panel 2: the crossover frontier s*(eta) -------------------------------
-    ax1.plot(cross_eta[valid], cross_s[valid], "o-", color="#2c3e50", lw=2, ms=4)
-    ax1.fill_between(cross_eta[valid], cross_s[valid], 1.0, color="#a3d9a5", alpha=0.6)
-    ax1.fill_between(cross_eta[valid], 0.0, cross_s[valid], color="#f5b7b1", alpha=0.6)
+    # --- Panel 2: the crossover frontier s*(eta), split by rhythm band ----------
+    # The idealized frontier (tight jitter) plus each band's real (f_c, sigma_t). A
+    # higher frontier = MORE synchrony required to pass = a SMALLER pass region above
+    # it. The bands lift the frontier (the jitter low-pass eats content), so the PASS
+    # area shrinks gamma -> low-beta -> high-beta: "content is the first casualty" as
+    # an area loss between rhythms.
+    ax1.plot(cross_eta[valid], cross_s[valid], "--", color="0.4", lw=1.8,
+             label=f"{IDEALIZED.label}", zorder=3)
+    ax1.fill_between(cross_eta[valid], cross_s[valid], 1.0, color="#a3d9a5", alpha=0.35)
+
+    for band in BANDS:
+        cs = np.array([_crossover_s(e, s_fine, band=band) for e in cross_eta],
+                      dtype=float)
+        v = np.isfinite(cs)
+        ax1.plot(cross_eta[v], cs[v], lw=2.4, color=band.colour, zorder=5,
+                 label=f"{band.label}: f_c={band.f_c_hz:.0f}Hz")
+
     ax1.axvline(DEFAULT_ETA_FLOOR, color="red", ls=":", lw=1.4)
-    ax1.text(0.55, 0.82, "PASS", color="#1e8449", fontsize=11, fontweight="bold")
-    ax1.text(0.12, 0.10, "FAIL", color="#922b21", fontsize=11, fontweight="bold")
     ax1.set_xlim(0, 1)
     ax1.set_ylim(0, 1)
     ax1.set_xlabel("dilatation fraction  eta")
     ax1.set_ylabel("minimum synchrony  s*  to pass")
-    ax1.set_title("2. Crossover frontier: more dilatation buys lower synchrony")
+    ax1.set_title("2. Frontier by band: a sloppier rhythm demands more synchrony")
+    ax1.legend(loc="upper right", fontsize=7.5, framealpha=0.9)
     ax1.grid(alpha=0.3)
 
     # --- Panel 3: the four confidence tiers ------------------------------------

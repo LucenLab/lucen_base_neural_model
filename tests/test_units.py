@@ -124,6 +124,20 @@ def test_volume_fraction_consistency_tolerance_is_tunable():
     params.check_volume_fraction_consistency(g, rel_tol=1.5)
 
 
+def test_shipped_default_voxel_is_consistent_with_central_preset():
+    """Regression guard: the SHIPPED default voxel must reconcile with central().
+
+    The guard above tests the mechanism with local voxels; this pins the actual
+    constants the model ships. DEFAULT_VOXEL (N=21,000) paired with
+    MechanicsParams.central() (f_cell=0.15 at r=8 um) must pass at the tight default
+    tolerance - the silent N=10,000 mismatch that inflated every generic displacement
+    2x cannot recur without failing here.
+    """
+    from base_neural_model.model.run import DEFAULT_VOXEL
+
+    MechanicsParams.central().check_volume_fraction_consistency(DEFAULT_VOXEL)
+
+
 def test_module1_outputs_are_sane_si(d_single, voxel, source_params, synchrony_grid):
     """Every displacement Module 1 emits crosses the boundary in sane SI metres.
 
