@@ -27,6 +27,27 @@ def test_motor_rhythm_is_beta_band():
     assert 13.0 <= f_c <= 30.0
 
 
+# --- band-edge guard: every preset must oscillate in the band it is named for ----
+# This pins the labels to the dynamics so a preset cannot silently drift out of its
+# claimed band again (e.g. a "gamma" preset that actually runs at beta). Bands follow
+# the conventional cortical definitions: gamma 30-80 Hz, high-beta ~20-30, low-beta
+# ~13-20 (Buzsaki & Wang 2012; Baker 2007; Kilavik et al. 2013).
+@pytest.mark.parametrize(
+    ("preset", "lo_hz", "hi_hz"),
+    [
+        (EIParams.central, 30.0, 80.0),               # genuine gamma
+        (EIParams.motor_cortex, 20.0, 30.0),          # high-beta
+        (EIParams.motor_cortex_low_beta, 13.0, 20.0),  # low-beta
+    ],
+)
+def test_preset_oscillates_in_its_named_band(preset, lo_hz, hi_hz):
+    ts = run_activity(preset(), duration_s=1.2, fs_hz=2000.0)
+    f_c = ts.spectrum.dominant_freq_hz
+    assert lo_hz <= f_c <= hi_hz, f"{preset.__name__}: f_c={f_c} Hz outside [{lo_hz}, {hi_hz}]"
+    # A usable limit cycle, not a collapsed/silent loop reading a spurious peak.
+    assert ts.mean_synchrony > 0.3
+
+
 def test_motor_population_is_columnar():
     assert EIParams.motor_cortex().structural_alignment > 0.5
 

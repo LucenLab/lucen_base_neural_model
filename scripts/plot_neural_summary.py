@@ -46,15 +46,16 @@ def _survival(freq_hz: np.ndarray, sigma_t_s: float) -> np.ndarray:
     return np.exp(-2.0 * np.pi**2 * freq_hz**2 * sigma_t_s**2)
 
 
-def build_figure(*, motor: bool):
+def build_figure(*, motor: bool, low_beta: bool = False):
     import matplotlib.pyplot as plt
 
     if motor:
-        report = run_motor_cortex()
+        report = run_motor_cortex(low_beta=low_beta)
         from base_neural_model.base.types import VoxelGeometry
 
         voxel = VoxelGeometry.motor_cortex_layer5()
-        title_region = "Motor cortex (M1)"
+        band = "low-beta" if low_beta else "high-beta"
+        title_region = f"Motor cortex (M1, {band})"
     else:
         report = run_neural_model()
         voxel = DEFAULT_VOXEL
@@ -199,6 +200,8 @@ def main() -> None:
     )
     parser.add_argument("--motor", action="store_true",
                         help="use the motor-cortex (M1) preset")
+    parser.add_argument("--low-beta", action="store_true",
+                        help="with --motor, use the low-beta M1 preset (~13-17 Hz)")
     parser.add_argument("--show", action="store_true", help="also open a window")
     parser.add_argument("--dpi", type=int, default=150)
     args = parser.parse_args()
@@ -209,7 +212,7 @@ def main() -> None:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig = build_figure(motor=args.motor)
+    fig = build_figure(motor=args.motor, low_beta=args.low_beta)
     fig.savefig(args.output, dpi=args.dpi, bbox_inches="tight")
     print(f"wrote {args.output.resolve()}")
     if args.show:

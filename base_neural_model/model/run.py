@@ -156,6 +156,7 @@ def run_neural_model(
 
 def run_motor_cortex(
     *,
+    low_beta: bool = False,
     duration_s: float = 1.0,
     fs_hz: float = 2000.0,
     unaberrated_floor_m: float = DEFAULT_FLOOR_M,
@@ -169,9 +170,16 @@ def run_motor_cortex(
     here: the columnar alignment, expressed through the beta-band synchrony, adds a
     directional term on top of the volume-change signal - the feature a generic
     isotropic cortical patch does not have.
+
+    ``low_beta`` selects the low-beta E/I preset (:meth:`EIParams.motor_cortex_low_beta`,
+    ~13-17 Hz) instead of the default high-beta one (~20-25 Hz); the mechanics and voxel
+    are identical, only the rhythm differs (Kilavik et al. 2013).
     """
+    ei = (
+        EIParams.motor_cortex_low_beta() if low_beta else EIParams.motor_cortex()
+    )
     return run_neural_model(
-        EIParams.motor_cortex(),
+        ei,
         geom=VoxelGeometry.motor_cortex_layer5(),
         mechanics=MechanicsParams.motor_cortex(),
         duration_s=duration_s,
