@@ -14,6 +14,7 @@ directly and drive the mechanics without integrating any ODEs.
 from __future__ import annotations
 
 from base_neural_model.activity.jitter import total_jitter
+from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.activity.orientation import effective_orientation_coherence
 from base_neural_model.activity.timeseries import ActivityTimeseries
 from base_neural_model.base.bands import Band
@@ -43,12 +44,24 @@ def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
     mechanics, never the slow envelope (Invariant 3).
     """
     s = activity.mean_synchrony
-    f_c = activity.spectrum.dominant_freq_hz
-    if f_c <= 0.0:
+    # The content corner must be a CONTENT-BAND carrier, not merely the overall
+    # dominant peak: for an envelope-dominated signal (e.g. a movement event whose
+    # desync/rebound structure dominates the spectrum) the overall peak lies in the
+    # slow envelope, and reducing that to a CONTENT_FAST state would violate Invariant
+    # 3 (the content band is the target, never the slow envelope) -- silently, since a
+    # ~1 Hz f_c makes the jitter low-pass ~1.0 and defeats the content-survival gate.
+    # ``content_dominant_freq_hz`` is None exactly when no fast carrier exists, so we
+    # reject that case rather than substitute the envelope peak.
+    f_c = activity.spectrum.content_dominant_freq_hz
+    if f_c is None or f_c <= 0.0:
         raise ValueError(
-            "activity has no content-band oscillation (dominant_freq_hz <= 0); "
-            "the E/I model is not in an oscillatory regime, so no content corner "
-            "can be reduced"
+            "activity has no content-band oscillation to reduce: the dominant peak "
+            f"({activity.spectrum.dominant_freq_hz:.3g} Hz) is in the slow envelope "
+            f"(< {ENVELOPE_CONTENT_BOUNDARY_HZ:.0f} Hz boundary), so there is no fast "
+            "content carrier. Reducing this to a CONTENT_FAST NeuralState would "
+            "mislabel the envelope as content (Invariant 3). This happens when the "
+            "activity is an envelope-dominated event (e.g. a movement trial reduced "
+            "over a short record) rather than a sustained content-band rhythm."
         )
     sigma_t = total_jitter(s, f_c)
 

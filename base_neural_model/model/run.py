@@ -251,10 +251,23 @@ def run_motor_trial(
     Unlike :func:`run_motor_cortex` (a steady resting-beta cycle), this imposes a
     movement-locked drive ``P(t)`` (:func:`base_neural_model.activity.motor_drive.
     movement_drive`): beta is suppressed (synchrony desynchronizes) at movement onset
-    and rebounds above baseline afterwards. The displacement timeseries ``dz(t)`` -
-    and, through the orientation coherence, the directional channel - therefore track
-    the movement event rather than a constant level. The reduced ``NeuralState``
-    summarizes the whole trial (its time-averaged synchrony and the f_c it sits at).
+    and rebounds above baseline afterwards.
+
+    **This is a dynamics visualizer: the deliverable is the timeseries, not a verdict.**
+    The product is ``report.displacement_timeseries`` -- the ``dz(t)`` curve showing
+    baseline -> desync dip -> rebound -- and the directional channel it carries
+    (``report.mechanical_displacement.directional_axial_m``, the columnar M1 signal).
+
+    The reduced ``NeuralState`` on the report is **not** a summary of the event: it is a
+    whole-record *average* synchrony with the content-band carrier ``f_c``, and it
+    exists only because the transduction chain needs a content corner to stamp the
+    jitter low-pass onto the timeseries. Because the trial is an event (synchrony dips
+    and rebounds), that time-average describes no instant the trial actually passed
+    through. **Consequently the pass/fail gate fields (``passes_amplitude_gate``,
+    ``passes_content_gate``, ``passes_dilatation_gate``) are not meaningful for a
+    movement trial** -- they score a fictional whole-record steady state. Read the
+    detectability verdict from the steady-state entry points (:func:`run_motor_cortex`,
+    :func:`run_motor_demo`), not from a movement trial.
     """
     drive = movement_drive(profile)
     return run_neural_model(

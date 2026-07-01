@@ -74,6 +74,13 @@ r = run_motor_trial(MovementProfile(onset_time_s=0.4, move_duration_s=0.3))
 # r.displacement_timeseries.surviving_dz  ->  baseline, desync dip, rebound
 ```
 
+`run_motor_trial` is a **dynamics visualizer**: the deliverable is the timeseries above
+(and the directional channel it carries), not a detectability verdict. Its reduced
+`NeuralState` is a whole-record *average* — needed only to stamp the content-band
+low-pass onto `dz(t)` — so the report's pass/fail gate fields describe a steady state the
+event never occupied and are **not** meaningful here. For a detectability verdict use the
+steady-state entry points (`run_motor_cortex`, `run_motor_demo`).
+
 A modeling note: in this mean-field reduction, "synchrony" is the rhythm envelope
 gated by the population's engaged activation (`activity/timeseries.py`), so the drive
 dip that collapses activation is what desynchronizes it. That is a deliberate, stated

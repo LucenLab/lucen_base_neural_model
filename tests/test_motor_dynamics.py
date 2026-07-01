@@ -96,3 +96,22 @@ def test_motor_trial_provenance_records_movement():
     report = run_motor_trial(duration_s=0.6, fs_hz=2000.0)
     joined = " ".join(report.provenance.assumptions)
     assert "movement-locked" in joined or "beta" in joined.lower()
+
+
+def test_motor_trial_is_a_dynamics_visualizer_with_content_band_fc():
+    """The trial's deliverable is the timeseries, reduced f_c is the content carrier.
+
+    Contract for the dynamics-visualizer design: even though a movement event's overall
+    dominant spectral peak is the slow (~1 Hz) movement envelope, the reduced
+    NeuralState must carry a CONTENT-BAND f_c (the beta carrier) -- both because the
+    timeseries low-pass needs a real content corner and because a sub-boundary f_c would
+    be a silent Invariant-3 violation. The timeseries is the product; the gates are a
+    whole-record-average artifact and are deliberately not asserted here.
+    """
+    from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
+
+    report = run_motor_trial(duration_s=1.0, fs_hz=2000.0)
+    # The deliverable exists and is a real curve.
+    assert report.displacement_timeseries.surviving_dz.size > 0
+    # The reduced content corner is a genuine content-band carrier, not the envelope.
+    assert report.neural_state.content_freq_hz >= ENVELOPE_CONTENT_BOUNDARY_HZ
