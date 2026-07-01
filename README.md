@@ -36,7 +36,7 @@ r.all_gates_pass                        # the three kill gates
 
 # Opt into the acoustic detection layer (Gate A / Stage 1):
 d = run_motor_demo().detection          # sustained motor imagery → detectability
-d.snr_db                                # SNR vs the derived through-skull floor (≈ −2 dB)
+d.snr_db                                # SNR vs the derived through-skull floor (≈ +0.7 dB)
 d.limiting_denominator                  # "echo_snr" | "clutter"
 ```
 
@@ -144,8 +144,10 @@ fraction η and the activity drive that sets synchrony.
 The opt-in `forward/` layer then carries that source displacement across the
 source/sensing seam to the **Gate-A / Stage-1 detectability question**: with within-epoch
 √N coherent integration and the through-skull Walker–Trahey floor, the conservative
-motor-imagery baseline lands ≈ −2 dB — within an order of the detection floor, the
-specs' engineering-sized gap — and the acoustic budget sweep
+motor-imagery baseline lands ≈ +0.7 dB — just clearing the detection floor, the specs'
+engineering-sized margin — and the acoustic budget sweep
 ([`forward/budget.py`](base_neural_model/forward/budget.py)) shows the verdict collapses
-onto skull loss and the integration window. The detection layer is opt-in: without an
-acquisition the build is purely a neural source model, not a detector.
+onto skull loss and the integration window: at −2 dB per one-way skull dB, the 0 dB wall
+sits at ≈ 12.4 dB one-way (≈ 24.7 dB two-way) skull loss, an order of magnitude from the
+demo's operating point. The detection layer is opt-in: without an acquisition the build
+is purely a neural source model, not a detector.

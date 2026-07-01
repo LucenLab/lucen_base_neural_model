@@ -124,7 +124,7 @@ def _smooth(x: np.ndarray, *, window: int) -> np.ndarray:
 def run_activity(
     params: EIParams | None = None,
     *,
-    duration_s: float = 1.0,
+    duration_s: float = 8.0,
     fs_hz: float = 2000.0,
     phase_spread_hz: float = 4.0,
     coupling_gain: float = 300.0,
@@ -135,8 +135,15 @@ def run_activity(
     ``phase_spread_hz`` is the intrinsic firing-frequency heterogeneity ``gamma`` and
     ``coupling_gain`` (synaptic gain per unit oscillation amplitude) scales the rhythm
     envelope into the entraining coupling; the default places the central limit
-    cycle's synchrony at ``mean r ~ 0.65`` with r(t) tracking the rhythm. Defaults
-    integrate 1 s of the central limit cycle at 2 kHz.
+    cycle's synchrony at ``mean r ~ 0.65`` with r(t) tracking the rhythm.
+
+    ``duration_s`` defaults to 8 s: long enough that (a) the FFT resolves ``f_c`` to
+    ~0.1 Hz (resolution = 1/duration), so the reported corner is not a 1 Hz-bin
+    rounding of the true harmonic, and (b) the synchrony ``r(t)`` sits at its sustained
+    steady-state value rather than the start-up ramp. A short (~1 s) window catches the
+    envelope-coupling ramp and under-reports synchrony (~0.76 vs the steady ~0.96); a
+    sustained brain-reading epoch is steady-state, so the longer default is the honest
+    operating point. Constant-drive integration at 2 kHz.
 
     ``drive_fn`` is an optional time-varying excitatory drive ``P(t)`` (e.g. the
     movement-locked motor profile, :func:`motor_drive.movement_drive`); when given it

@@ -123,21 +123,33 @@ class EIParams:
         generic column (Baker 2007, Curr Opin Neurobiol 17:649-655; Kilavik et al.
         2013, Exp Neurol 245:15-26). The beta band splits into a high-beta (~20-30 Hz)
         and a low-beta (~13-20 Hz) component (Kilavik et al. 2013); this preset is the
-        high-beta one (see :meth:`motor_cortex_low_beta` for the low-beta variant). A
-        slower inhibitory loop (longer tau_i than the gamma preset) drops the E/I limit
-        cycle from gamma into beta. The defining structural difference is set here too:
-        M1 layer-5 pyramidal cells (including the giant Betz cells) are large and
-        strongly **columnar**, so the structural alignment ``Q_struct`` is high - which,
-        expressed through the movement-locked synchrony, drives the directional channel
-        that a generic isotropic patch lacks.
+        high-beta one (see :meth:`motor_cortex_low_beta` for the low-beta variant).
+
+        The **fundamental** of the E/I limit cycle is placed at ~20 Hz (not a harmonic
+        of a slower rhythm): the oscillation frequency is set by the geometric scale of
+        the two time constants, while the ratio ``tau_i / tau_e ~ 2.8`` keeps the loop
+        on a high-synchrony limit cycle (the delayed-inhibition Hopf mechanism needs
+        ``tau_i > tau_e``; shrinking ``tau_i`` toward ``tau_e`` extinguishes the cycle).
+        Fast-GABA inhibition (``tau_i ~ 7 ms``) with AMPA-fast excitation (``tau_e ~
+        2.5 ms``) yields a ~20 Hz fundamental carrying ~76% of the oscillation power.
+        The waveform is a non-sinusoidal **arch** with modest 2nd/3rd harmonics, which
+        is the physiological shape of motor-cortical beta -- its sharpness tracks the
+        synchrony of the underlying synaptic input (Cole et al. 2017, J Neurosci
+        37:4830; Cole & Voytek 2017, Trends Cogn Sci 21:137).
+
+        The defining structural difference is set here too: M1 layer-5 pyramidal cells
+        (including the giant Betz cells) are large and strongly **columnar**, so the
+        structural alignment ``Q_struct`` is high - which, expressed through the
+        movement-locked synchrony, drives the directional channel that a generic
+        isotropic patch lacks.
         """
         return cls(
             w_ee=16.0,
             w_ei=12.0,
             w_ie=15.0,
             w_ii=3.0,
-            tau_e_s=8e-3,    # slower than gamma -> beta-band E/I loop
-            tau_i_s=20e-3,   # ~20 ms inhibitory decay -> high-beta (~20-25 Hz)
+            tau_e_s=2.5e-3,   # AMPA-fast excitation; sets the fast E/I loop scale
+            tau_i_s=7.0e-3,   # fast-GABA inhibition; tau_i/tau_e ~ 2.8 -> ~20 Hz fundamental
             gain_e=1.0,
             gain_i=1.0,
             theta_e=4.0,
@@ -150,19 +162,22 @@ class EIParams:
                     "Wilson & Cowan E/I mean field tuned to the M1 high-beta rhythm; "
                     "beta sensorimotor rhythm and its high/low split (Baker 2007, Curr "
                     "Opin Neurobiol 17:649; Kilavik et al. 2013, Exp Neurol 245:15); "
-                    "layer-5 pyramidal (Betz) columnar alignment (Murphy et al. 2016)"
+                    "non-sinusoidal arch waveform of motor beta (Cole et al. 2017, J "
+                    "Neurosci 37:4830); layer-5 (Betz) columnar alignment (Murphy 2016)"
                 ),
                 assumptions=(
-                    "M1 sensorimotor rhythm is beta (~13-30 Hz); the slower inhibitory "
-                    "loop (tau_i ~ 20 ms vs ~5 ms for gamma) places the E/I limit "
-                    "cycle in high-beta (~20-25 Hz)",
+                    "M1 sensorimotor rhythm is beta (~13-30 Hz); the E/I FUNDAMENTAL "
+                    "is placed at ~20 Hz (high-beta) by fast-GABA/AMPA time constants "
+                    "(tau_i ~ 7 ms, tau_e ~ 2.5 ms), NOT as a harmonic of a slower "
+                    "rhythm; the ratio tau_i/tau_e ~ 2.8 sustains a high-synchrony cycle",
+                    "the beta waveform is a non-sinusoidal arch (~76% power in the "
+                    "fundamental, modest harmonics); its sharpness reflects input "
+                    "synchrony (Cole et al. 2017) -- a feature, not an artifact",
                     "layer-5 pyramidal / Betz cells are large and strongly columnar "
                     "-> high structural alignment Q_struct ~ 0.9 (vs ~0 for an "
                     "isotropic patch); the directional channel is material in M1",
                     "structural alignment is expressed as orientation coherence "
                     "through the temporal synchrony (Q_eff = Q_struct * s)",
-                    "beta content carries movement-related modulation (the motor "
-                    "'content' band), distinct from the slow movement envelope",
                 ),
                 band=Band.CONTENT_FAST,
             ),
@@ -175,22 +190,27 @@ class EIParams:
         The low-beta companion to :meth:`motor_cortex`. Sensorimotor beta is not a
         single peak but comprises distinct low-beta (~13-20 Hz) and high-beta
         (~20-30 Hz) components with different movement-related behaviour (Kilavik et
-        al. 2013, Exp Neurol 245:15-26). A still-slower inhibitory loop than the
-        high-beta preset places the E/I limit cycle in low-beta. Columnar structure and
-        the M1 mechanics are identical to :meth:`motor_cortex`; only the rhythm differs.
+        al. 2013, Exp Neurol 245:15-26). As in the high-beta preset the E/I
+        **fundamental** is placed in-band -- here at ~15 Hz -- by scaling both time
+        constants up together (``tau_i ~ 9 ms``, ``tau_e ~ 3.5 ms``) while holding the
+        ``tau_i / tau_e ~ 2.6`` ratio that sustains the high-synchrony limit cycle; a
+        slower loop than the high-beta preset lowers the fundamental, not a harmonic.
+        The same non-sinusoidal arch waveform applies (Cole et al. 2017). Columnar
+        structure and the M1 mechanics are identical to :meth:`motor_cortex`; only the
+        rhythm differs.
         """
         return cls(
             w_ee=16.0,
             w_ei=12.0,
             w_ie=15.0,
             w_ii=3.0,
-            tau_e_s=12e-3,   # slower still -> low-beta E/I loop
-            tau_i_s=28e-3,   # ~28 ms inhibitory decay -> low-beta (~13-17 Hz)
+            tau_e_s=3.5e-3,  # slower than high-beta -> lower fundamental, same ratio
+            tau_i_s=9.0e-3,  # tau_i/tau_e ~ 2.6 -> ~15 Hz low-beta fundamental
             gain_e=1.0,
             gain_i=1.0,
             theta_e=4.0,
             theta_i=3.7,
-            drive_e=1.8,     # raised drive sustains the cycle at the slow timescale
+            drive_e=1.3,     # same drive as high-beta; the slower loop sets the lower freq
             drive_i=0.0,
             structural_alignment=0.9,  # same M1 layer-5 columnar alignment
             provenance=Provenance(
@@ -202,9 +222,9 @@ class EIParams:
                 ),
                 assumptions=(
                     "sensorimotor beta has distinct low-beta (~13-20 Hz) and high-beta "
-                    "(~20-30 Hz) components (Kilavik et al. 2013); the slower "
-                    "inhibitory loop (tau_i ~ 28 ms) places this limit cycle in "
-                    "low-beta (~13-17 Hz)",
+                    "(~20-30 Hz) components (Kilavik et al. 2013); the E/I FUNDAMENTAL "
+                    "is placed at ~15 Hz (low-beta) by a slower loop (tau_i ~ 9 ms, "
+                    "tau_e ~ 3.5 ms) than high-beta, at the same ratio, NOT as a harmonic",
                     "layer-5 pyramidal / Betz columnar alignment Q_struct ~ 0.9, as in "
                     "the high-beta preset; the directional channel is material",
                     "structural alignment is expressed as orientation coherence "

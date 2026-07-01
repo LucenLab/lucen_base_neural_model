@@ -109,7 +109,7 @@ def run_neural_model(
     *,
     geom: VoxelGeometry = DEFAULT_VOXEL,
     mechanics: MechanicsParams | None = None,
-    duration_s: float = 1.0,
+    duration_s: float = 8.0,
     fs_hz: float = 2000.0,
     unaberrated_floor_m: float = DEFAULT_FLOOR_M,
     acquisition: AcquisitionParams | None = None,
@@ -208,7 +208,7 @@ def run_neural_model(
 def run_motor_cortex(
     *,
     low_beta: bool = False,
-    duration_s: float = 1.0,
+    duration_s: float = 8.0,
     fs_hz: float = 2000.0,
     unaberrated_floor_m: float = DEFAULT_FLOOR_M,
 ) -> NeuralModelReport:
@@ -273,7 +273,7 @@ def run_motor_demo(
     drive_level: float = 1.3,
     acquisition: AcquisitionParams | None = None,
     residual_clutter_m: float = 0.0,
-    duration_s: float = 1.5,
+    duration_s: float = 8.0,
     fs_hz: float = 2000.0,
 ) -> NeuralModelReport:
     """Run the **flagship-demo Gate A**: sustained motor imagery -> detectability verdict.
@@ -285,10 +285,15 @@ def run_motor_demo(
     favorable source term -- and scores it through the acoustic detection layer against
     the derived through-skull floor with the within-epoch integration gain folded in.
 
-    ``acquisition`` defaults to :meth:`AcquisitionParams.demo_motor` (1.5 s epoch at
-    4 kHz -> ~x77 integration gain). The activity ``duration_s`` defaults to match the
-    acquisition epoch so the dynamics and the integration window describe the same
-    epoch. Pass ``residual_clutter_m`` to test the clutter-limited regime.
+    ``acquisition`` defaults to :meth:`AcquisitionParams.demo_motor` (a **1.5 s imaging
+    epoch** at 4 kHz -> ~x77 integration gain). This is the acoustic dwell that sets the
+    integration count ``N_ens`` and is independent of ``duration_s``, which is how long
+    the E/I dynamics are integrated to establish the *steady-state* synchrony the
+    sustained epoch holds. ``duration_s`` defaults to 8 s so the reported synchrony is
+    the sustained operating point (~0.96), not the cold-start ramp a 1.5 s window would
+    under-report (~0.81); the sustained drive is a held level, so integrating it longer
+    simply reaches steady state. Pass ``residual_clutter_m`` to test the clutter-limited
+    regime.
     """
     acq = acquisition or AcquisitionParams.demo_motor()
     drive = sustained_imagery_drive(drive_level)

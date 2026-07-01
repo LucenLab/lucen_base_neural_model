@@ -16,9 +16,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# Content/envelope boundary (Hz). Below this is the slow speech envelope (timing);
-# at/above it is the fast content band the mechanics target.
-ENVELOPE_CONTENT_BOUNDARY_HZ: float = 16.0
+# Content/envelope boundary (Hz). Below this is slow sub-rhythm modulation (the
+# movement envelope / mu-band timing); at/above it is the beta content band the
+# mechanics target. Set at the sensorimotor beta lower edge (~13 Hz, Kilavik et al.
+# 2013) so it sits BELOW the modelled low-beta fundamental (~15 Hz) and never amputates
+# it -- the earlier 16 Hz value was a speech envelope/content line that wrongly excluded
+# a legitimate low-beta carrier, forcing f_c onto a harmonic. The content corner itself
+# is the dominant oscillatory peak (the fundamental), taken as the global non-DC peak.
+ENVELOPE_CONTENT_BOUNDARY_HZ: float = 13.0
 
 
 @dataclass(frozen=True)
@@ -74,15 +79,15 @@ def analyze_oscillation(
     content_power = float(spectrum[content_mask].sum())
     envelope_power = float(spectrum[envelope_mask].sum())
 
-    if content_mask.any() and spectrum[content_mask].max() > 0.0:
-        dominant = float(freqs[content_mask][np.argmax(spectrum[content_mask])])
-    else:
-        # No content-band oscillation: fall back to the overall non-DC peak.
-        dominant = (
-            float(freqs[nonzero][np.argmax(spectrum[nonzero])])
-            if nonzero.any()
-            else 0.0
-        )
+    # The content corner f_c is the dominant oscillatory peak -- the fundamental of the
+    # rhythm, taken as the global non-DC spectral peak. For a beta rhythm the
+    # fundamental IS the beta carrier (~76% of the power), so this points f_c at the
+    # rhythm itself rather than at a harmonic. (The older "peak strictly above the
+    # boundary" rule mis-fired when the fundamental sat just below the boundary, jumping
+    # f_c onto the 2nd harmonic; anchoring to the global peak fixes that.)
+    dominant = (
+        float(freqs[nonzero][np.argmax(spectrum[nonzero])]) if nonzero.any() else 0.0
+    )
 
     return OscillationSpectrum(
         freqs_hz=freqs,

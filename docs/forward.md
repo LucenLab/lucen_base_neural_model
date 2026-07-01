@@ -82,13 +82,13 @@ imagery + `AcquisitionParams.demo_motor()`.
 ## The honest result
 
 At the conservative baseline (30 dB free-field echo SNR, 24 dB two-way skull loss), the
-motor source (~3.5 nm static, s≈0.81) lifts to **~220 nm surviving** after ×77
-integration against a **~280 nm** through-skull floor — **SNR ≈ −2 dB, echo-SNR-limited.**
-That is the spec's success criterion exactly: *"only several decibels below the detection
-threshold… within one order of magnitude of detectability"* — an engineering-sized gap,
-now produced from first principles rather than asserted. The un-integrated source alone
-(~3.5 nm) sits far under the floor, which is precisely why the integration term is
-load-bearing.
+motor source (~4.4 nm static, s≈0.96) lifts to **~303 nm surviving** after ×77
+integration against a **~280 nm** through-skull floor — **SNR ≈ +0.7 dB, echo-SNR-limited.**
+That is the spec's success criterion, right at its edge: *"within one order of magnitude
+of detectability"* — the demo now lands just *over* the floor rather than just under it,
+an engineering-sized margin produced from first principles rather than asserted. The
+un-integrated source alone (~4.4 nm) sits far under the floor, which is precisely why the
+integration term is load-bearing.
 
 ## The budget sweep — where is the wall, and which axis carries the verdict
 
@@ -102,8 +102,8 @@ detection wall).
 (`model/sensitivity.py`, which collapses onto η and s): a one-at-a-time local sensitivity
 ranking the four acquisition axes by their dB swing over their literature span. It leads
 with **skull loss and epoch** — the two strategic levers (the wall, and the motor
-integration advantage). At the demo baseline the wall sits at **~11 dB one-way (~22 dB
-two-way) skull loss**, so the demo's 12 dB assumption lands just past it (−2 dB). SNR
+integration advantage). At the demo baseline the wall sits at **~12.3 dB one-way (~24.7 dB
+two-way) skull loss**, so the demo's 12 dB assumption lands just short of it (+0.7 dB). SNR
 falls a clean **−2 dB per one-way skull dB** (two-way × 20 log₁₀).
 
 [`scripts/plot_budget.py`](../scripts/plot_budget.py) renders both: SNR-vs-skull-loss at

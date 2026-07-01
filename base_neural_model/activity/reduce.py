@@ -13,7 +13,7 @@ directly and drive the mechanics without integrating any ODEs.
 
 from __future__ import annotations
 
-from base_neural_model.activity.jitter import jitter_from_synchrony
+from base_neural_model.activity.jitter import total_jitter
 from base_neural_model.activity.orientation import effective_orientation_coherence
 from base_neural_model.activity.timeseries import ActivityTimeseries
 from base_neural_model.base.bands import Band
@@ -26,9 +26,12 @@ def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
 
     * ``synchrony_fraction`` = the time-averaged Kuramoto order parameter ``mean r``;
     * ``content_freq_hz`` = the dominant content-band oscillation frequency ``f_c``;
-    * ``jitter_sigma_s`` = the jitter implied by that synchrony at ``f_c``
-      (:func:`jitter_from_synchrony`), so the activity and mechanics agree on the
-      content-band low-pass;
+    * ``jitter_sigma_s`` = the total firing-time jitter at ``f_c``
+      (:func:`total_jitter`): the synchrony-implied phase spread combined in quadrature
+      with an absolute (synchrony-independent) floor, so the activity and mechanics
+      agree on the content-band low-pass. The absolute floor is what keeps ``f_c``
+      load-bearing -- without it the low-pass collapses to ``synchrony`` at every
+      frequency and the content corner drops out (see :func:`total_jitter`);
     * ``mean_firing_rate_hz`` = the population mean firing rate;
     * ``orientation_coherence`` = the effective directional order ``Q_eff`` the
       mechanics consume, the population's structural alignment ``Q_struct`` expressed
@@ -47,7 +50,7 @@ def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
             "the E/I model is not in an oscillatory regime, so no content corner "
             "can be reduced"
         )
-    sigma_t = jitter_from_synchrony(s, f_c)
+    sigma_t = total_jitter(s, f_c)
 
     q_struct = activity.params.structural_alignment
     # Only emit an orientation coherence when the population is structurally aligned;
@@ -66,8 +69,8 @@ def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
     provenance = extend(
         activity.provenance,
         f"reduced to NeuralState: s = mean r = {s:.3g}, f_c = {f_c:.3g} Hz, "
-        f"sigma_t = {sigma_t:.3g} s (from s at f_c), mean rate = "
-        f"{activity.mean_firing_rate_hz:.3g} Hz",
+        f"sigma_t = {sigma_t:.3g} s (phase spread at f_c + absolute floor, in "
+        f"quadrature), mean rate = {activity.mean_firing_rate_hz:.3g} Hz",
         *extra,
         band=Band.CONTENT_FAST,
     )

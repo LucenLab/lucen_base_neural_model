@@ -18,6 +18,15 @@ from __future__ import annotations
 
 import math
 
+# Absolute (synchrony-independent) spike-timing jitter floor, seconds. Real cortical
+# spike timing has an irreducible standard deviation of order a few milliseconds set by
+# channel noise, synaptic-latency variability, and conduction jitter -- present even in
+# a perfectly phase-locked population. Measured single-neuron reliability puts this at
+# ~1-5 ms (e.g. Mainen & Sejnowski 1995, Science 268:1503, ~1-2 ms to repeated current
+# injection in vitro; in vivo cortical spike jitter is a few ms). It does NOT shrink as
+# synchrony rises, which is why it must be added independently of the phase-spread term.
+ABSOLUTE_JITTER_FLOOR_S: float = 3.0e-3
+
 
 def jitter_from_synchrony(synchrony: float, freq_hz: float) -> float:
     """Spike-timing jitter ``sigma_t`` (s) from synchrony ``r`` at rhythm ``freq_hz``.
@@ -38,6 +47,39 @@ def jitter_from_synchrony(synchrony: float, freq_hz: float) -> float:
     r = min(max(synchrony, 1e-6), 1.0 - 1e-9)
     sigma_phi = math.sqrt(-2.0 * math.log(r))   # radians of phase spread
     return sigma_phi / (2.0 * math.pi * freq_hz)
+
+
+def total_jitter(
+    synchrony: float,
+    freq_hz: float,
+    *,
+    floor_s: float = ABSOLUTE_JITTER_FLOOR_S,
+) -> float:
+    r"""Total spike-timing jitter ``sigma_t`` (s): phase-spread AND an absolute floor.
+
+    Two independent contributions to firing-time spread add in quadrature:
+
+    * the **synchrony-implied** spread ``sigma_phi / (2 pi f)`` from population phase
+      disagreement (:func:`jitter_from_synchrony`), which *does* shrink as the
+      population phase-locks; and
+    * the **absolute floor** ``floor_s`` (channel/synaptic/conduction jitter), which
+      does not.
+
+    ``sigma_t = sqrt(sigma_synchrony^2 + floor_s^2)``.
+
+    This is the correction that makes the content corner ``f_c`` load-bearing. With the
+    synchrony-only jitter, ``sigma_t = sigma_phi / (2 pi f_c)`` makes the low-pass
+    ``exp(-2 pi^2 f_c^2 sigma_t^2) = exp(-sigma_phi^2) = synchrony`` -- the ``f_c``
+    cancels and survival collapses to ``s`` regardless of frequency, so the content
+    band is inert. The absolute floor breaks that cancellation: at fixed ``floor_s``
+    the survival ``exp(-2 pi^2 f_c^2 floor_s^2)`` falls with ``f_c`` (quadratically),
+    so higher-frequency content is genuinely harder to detect and where the content
+    band sits finally matters.
+    """
+    if floor_s < 0.0:
+        raise ValueError(f"floor_s must be >= 0, got {floor_s!r}")
+    sigma_sync = jitter_from_synchrony(synchrony, freq_hz)
+    return math.hypot(sigma_sync, floor_s)
 
 
 def content_band_survival(sigma_t: float, f_c: float) -> float:
