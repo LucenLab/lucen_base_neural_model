@@ -51,6 +51,21 @@ from base_neural_model.model.gates import DEFAULT_ETA_FLOOR
 
 # A fixed unaberrated floor and matching estimate floor for the plane (metres).
 _FLOOR_M = 1e-9
+
+
+@pytest.fixture
+def d_single():
+    """Fixed test-scale single-neuron displacement for the (eta, s) pass-space MACHINERY.
+
+    Pinned to the pre-revision 2 nm and decoupled from the honest cited constant
+    (~0.4 nm), so the crossover-frontier and tier-localization assertions run in a
+    non-degenerate feasible region. The honest Delta r drives the demo verdict.
+    """
+    from dataclasses import replace
+
+    from base_neural_model import get_single_neuron_displacement
+
+    return replace(get_single_neuron_displacement(), value_m=2e-9)
 # Low jitter so Gate 2 is genuinely alive across the plane (not auto-extinguished);
 # the jitter low-pass is exercised separately in test_envelope_gates.py.
 _LOW_JITTER_S = 0.2e-3

@@ -73,34 +73,57 @@ def test_detection_absent_without_acquisition(report):
 
 
 def test_acquisition_attaches_detection_budget():
-    """Supplying an acquisition attaches a budget and scores against the derived floor."""
+    """Supplying the (honest) demo acquisition attaches a budget scored against the floor.
+
+    ``demo_motor`` now carries the honest acoustic terms, so the effective integration is
+    the burst-limited ~x10 (N_ens = 100), not the raw x77 (which is demo_motor_optimistic).
+    """
     r = run_neural_model(
         duration_s=0.5, fs_hz=2000.0, acquisition=AcquisitionParams.demo_motor()
     )
     assert r.detection is not None
     d = r.detection
-    assert d.integration_gain == pytest.approx(77.46, rel=1e-3)
-    assert d.surviving_dz_m > 0.0
+    assert d.raw_ensemble_count == 6000
+    assert d.ensemble_count == 100                       # burst + decorrelation capped
+    assert d.integration_gain == pytest.approx(10.0, rel=1e-6)
+    assert d.effective_n_elements == 154                 # aperture coherence 0.6
+    assert d.aberration_floor_m > 0.0                    # residual-aberration floor present
+    assert d.snr_exceeds_safety is True                  # 30 dB > 28 dB transcranial ceiling
     assert d.floor_m > 0.0
-    assert d.limiting_denominator == "echo_snr"
+    # The optimistic baseline still gives the historical x77 (the before/after audit).
+    opt = run_neural_model(
+        duration_s=0.5, fs_hz=2000.0,
+        acquisition=AcquisitionParams.demo_motor_optimistic(),
+    )
+    assert opt.detection.integration_gain == pytest.approx(77.46, rel=1e-3)
 
 
-def test_motor_demo_lands_within_an_order_of_the_floor():
-    """The flagship Gate A: integration lifts the source within ~an order of the floor.
+def test_motor_demo_content_band_is_far_under_but_envelope_is_large():
+    """The honest flagship Gate A: the direct beta signal is orders under; fUS is not.
 
-    The spec's success criterion is 'within one to two orders of magnitude of the
-    detection floor'. With the demo's conservative echo SNR and skull loss the motor
-    source, after the ~x77 integration gain, lands within a single order of the derived
-    through-skull floor -- the engineering-sized gap, not a wall.
+    With the honest source physics (sub-nm Delta r, viscoelastic transfer, carrier depth,
+    coherent fraction) and the honest acoustic terms (burst-limited integration, aperture
+    decoherence, residual aberration, safety-capped echo SNR), the direct neuromechanical
+    beta content sits ~50+ dB under the through-skull floor -- not the prior -13 dB
+    'within an order'. The band-separated decomposition makes the trade explicit: the slow
+    hemodynamic (vascular/CBV) envelope is orders LARGER (the fUS signal), but it is the
+    envelope, not the specific beta carrier the phase-displacement readout targets.
     """
     r = run_motor_demo()
     d = r.detection
     assert d is not None
-    # Within one order: SNR in dB is better than -20 dB (a factor of 10 in displacement).
-    assert d.snr_db > -20.0
-    # The integration gain is load-bearing: without it the bare source is far under.
-    bare = d.surviving_dz_m / d.integration_gain
-    assert bare < d.floor_m  # the un-integrated source alone does not clear the floor
+    # The content-band (direct neuromechanical) verdict is deep under the floor.
+    assert d.snr_db < -40.0
+    # The mechanism decomposition is attached and band-separated.
+    m = r.mechanisms
+    assert m is not None
+    # The hemodynamic (vascular) envelope dwarfs the direct beta term by orders.
+    assert m.vascular_axial_m > 100.0 * m.direct_axial_m
+    assert m.envelope_band_axial_m > d.floor_m          # the envelope clears the floor
+    assert d.surviving_dz_m < d.floor_m                 # the beta content does not
+    # Both receive-side gains are still load-bearing on the (honest) floor.
+    raw_floor = d.floor_m * d.integration_gain * d.beamforming_gain
+    assert d.surviving_dz_m < raw_floor
 
 
 def test_clutter_limited_run_reports_clutter():

@@ -126,6 +126,14 @@ class MechanicsParams:
     orientation_coherence: float = 0.0   # Q: orientation order parameter, [0, 1]
     mean_axis_projection: float = 1.0    # mu = (director . beam axis), [-1, 1]
     matrix_poisson_ratio: float = 0.2    # nu for the deviatoric Eshelby response
+    # --- Honest source-physics factors (S1, S3, S6, S7); defaults are all INERT -------
+    # Each attenuates the coherent axial term for a distinct physical reason; at their
+    # defaults the chain reduces exactly to the prior lossless, quasi-static, fully
+    # coherent, unsaturated model. Flipped to honest values only in the motor preset.
+    viscoelastic_factor: float = 1.0          # S1: |H(f_c)| tissue transfer, (0, 1]
+    carrier_modulation_depth: float = 1.0     # S3: beta-carrier modulation depth, [0, 1]
+    correlation_coherent_fraction: float = 1.0  # S6: mutually phase-coherent fraction, (0, 1]
+    saturation_strain: float | None = None    # S7: soft cap on coherent strain (None -> off)
 
     @classmethod
     def central(cls) -> MechanicsParams:
@@ -174,6 +182,12 @@ class MechanicsParams:
             anisotropy=0.6,             # elongated, columnar cells -> deviatoric strain
             mean_axis_projection=1.0,   # beam ~ along the cortical column
             matrix_poisson_ratio=0.2,
+            # Honest source-physics factors (flipped on for the demo preset; contestable
+            # inputs like eta). At the generic column these stay inert (central()).
+            viscoelastic_factor=0.59,          # |H(20 Hz)|, springpot tau=3 ms, a=0.3 (S1)
+            carrier_modulation_depth=0.5,      # beta-carrier modulation depth (S3)
+            correlation_coherent_fraction=0.7,  # mutually phase-coherent fraction (S6)
+            saturation_strain=1.0e-2,          # ECS/membrane strain cap (S7; non-binding here)
         )
 
     def check_volume_fraction_consistency(
@@ -226,6 +240,10 @@ class MechanicalDisplacement:
     isotropic_axial_m: float = 0.0     # the volume-change (monopole) axial term
     directional_axial_m: float = 0.0   # the deviatoric (orientation) axial term, signed
     orientation_coherence: float = 0.0  # Q used, [0, 1]
+    # Product of the honest source-physics linear attenuations applied to the coherent
+    # term (viscoelastic x carrier-modulation x coherent-fraction; S1,S3,S6). 1.0 when
+    # the chain runs in its prior lossless/quasi-static/fully-coherent mode.
+    source_transfer_factor: float = 1.0
 
     @property
     def value_m(self) -> float:

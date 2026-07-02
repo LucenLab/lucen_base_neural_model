@@ -289,6 +289,38 @@ is 2–3 orders *under* it — a wall, found for the cost of an arithmetic sweep
 dominant killers are η, κ, and content-band s, exactly where a falsification-first
 model wants its sensitivity to live.
 
+## Honest source-physics factors (S1, S3, S6, S7) and the mechanism combination (S2)
+
+The base chain is *lossless, quasi-static, fully coherent, unsaturated*. Four
+reviewer-contestable factors on `MechanicsParams` (each **inert by default**, so `central()`
+is unchanged; flipped on in `motor_cortex()`) make it honest, each attenuating the coherent
+axial term once:
+
+- **S1 — viscoelastic transfer.** Brain tissue is viscoelastic with a frequency-dependent
+  complex modulus (MRE); [`viscoelastic.py`](../base_neural_model/mechanics/viscoelastic.py)
+  supplies `|H(f_c)| ≤ 1` from a fractional (springpot) relaxation, applied as
+  `viscoelastic_factor`. The tissue is not a massless spring.
+- **S3 — carrier vs envelope.** A per-spike AP transient is not a beta oscillation; only the
+  rate-modulated fraction lives at the carrier (`carrier_modulation_depth`).
+- **S6 — coherent fraction.** Only cells within a correlation length co-fire coherently
+  (`correlation_coherent_fraction`).
+- **S7 — saturation.** A soft cap on the coherent strain (`saturation_strain`); nearly inert
+  for the tiny direct strain (itself the finding), but it bites on the large osmotic strain.
+
+Combined with the honest cited Δr (sub-nm mammalian ~0.4 nm, not 2 nm), these drop the
+direct-neuromechanical beta term to ~0.1 nm.
+
+**The mechanism combination (S2).** [`mechanisms.py`](../base_neural_model/mechanics/mechanisms.py)
+models the three co-existing tissue displacement sources band-separated: the direct
+neuromechanical term (beta **content**), and the slow **osmotic** and **vascular** terms
+(**envelope**). Osmotic (ECS) strain is large but its net dilatation is small (redistribution
+at ~conserved volume → low `osmotic_eta`, saturation-capped); vascular (CBV) strain adds real
+volume (blood flows in → `vascular_eta ≈ 1`) and produces a ~µm displacement. So the beta
+content is orders under detectability while the hemodynamic envelope is large — but detecting
+the envelope is **fUS**, not the specific fast readout (and in a phase-displacement readout the
+1 Hz clutter high-pass removes it; fUS uses power-Doppler instead). `run_motor_demo().mechanisms`
+exposes the decomposition; `report.detection` scores the content-band term.
+
 ## Invariants and tests
 
 | Invariant | How the mechanics layer honors it | Test |

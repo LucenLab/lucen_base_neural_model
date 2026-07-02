@@ -152,15 +152,17 @@ def band_snr_db(
 ) -> float:
     """Detection SNR (dB) if ``[f_lo, f_hi]`` were the content band.
 
-    ``surviving = coherent_dz * G(f_lo, f_hi) * sqrt(N_ens)`` over the Walker-Trahey
-    through-skull floor. ``coherent_dz_m`` is the pre-jitter coherent displacement,
-    set by synchrony alone (band-invariant). Returns ``-inf`` for an empty band so
-    infeasible windows are strictly dominated.
+    ``surviving = coherent_dz * G(f_lo, f_hi)`` (bare) over the Walker-Trahey
+    through-skull floor, which already carries both the sqrt(n_elements) beamforming
+    and 1/sqrt(N_ens) integration gains -- so the signal is NOT re-amplified.
+    ``coherent_dz_m`` is the pre-jitter coherent displacement, set by synchrony alone
+    (band-invariant). Returns ``-inf`` for an empty band so infeasible windows are
+    strictly dominated.
     """
     g = inband_survival(ts, f_lo, f_hi, floor_s=floor_s)
     if g <= 0.0:
         return float("-inf")
-    surviving = coherent_dz_m * g * acq.integration_gain
+    surviving = coherent_dz_m * g
     floor = phase_displacement_floor(acq)
     if floor <= 0.0 or surviving <= 0.0:
         return float("-inf")
@@ -184,7 +186,7 @@ def _make_result(
         pk = ts.spectrum.power[(ts.spectrum.freqs_hz >= f_lo) & (ts.spectrum.freqs_hz <= f_hi) & (ts.spectrum.freqs_hz > 0)]
         f_c = float(fk[np.argmax(pk)])
     g = inband_survival(ts, f_lo, f_hi, floor_s=floor_s)
-    surviving = coherent_dz_m * g * acq.integration_gain
+    surviving = coherent_dz_m * g
     floor = phase_displacement_floor(acq)
     snr = band_snr_db(ts, acq, f_lo, f_hi, coherent_dz_m=coherent_dz_m, floor_s=floor_s)
     return BandResult(

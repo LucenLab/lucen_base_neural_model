@@ -27,6 +27,21 @@ _FLOOR_M = 1e-9
 _LOW_JITTER_S = 0.2e-3
 
 
+@pytest.fixture
+def d_single():
+    """Fixed test-scale single-neuron displacement for the eta* MACHINERY tests.
+
+    Pinned to the pre-revision 2 nm and decoupled from the honest cited constant
+    (~0.4 nm), so eta*(s) monotonicity, boundary-bracketing and infeasibility regimes
+    run in a non-degenerate feasible window. The honest Delta r drives the demo verdict.
+    """
+    from dataclasses import replace
+
+    from base_neural_model import get_single_neuron_displacement
+
+    return replace(get_single_neuron_displacement(), value_m=2e-9)
+
+
 def _params(*, d_single, **overrides) -> MechanicsParams:
     base = replace(
         MechanicsParams.central(),

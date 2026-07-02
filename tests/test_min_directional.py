@@ -24,6 +24,22 @@ from base_neural_model.model.min_directional import (
 
 
 @pytest.fixture
+def d_single():
+    """Fixed test-scale single-neuron displacement for the directional MACHINERY tests.
+
+    Pinned to the pre-revision 2 nm and decoupled from the honest cited constant
+    (~0.4 nm), so the bisection / boundary / monotonicity assertions run in a
+    non-degenerate feasible window. The honest Delta r drives the demo verdict, not this
+    machinery test.
+    """
+    from dataclasses import replace
+
+    from base_neural_model import get_single_neuron_displacement
+
+    return replace(get_single_neuron_displacement(), value_m=2e-9)
+
+
+@pytest.fixture
 def weak_aligned(d_single):
     """A weak (low-eta) source whose axes are aligned TO the beam (g > 0), so the
     directional channel can help and the iso signal alone may fail."""

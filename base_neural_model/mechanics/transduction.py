@@ -103,6 +103,20 @@ def _axial_from_strain(
     return eta * kappa * gate_len_m * eps_v
 
 
+def _saturate(eps: float, saturation_strain: float | None) -> float:
+    """Soft cap on the coherent strain ``eps / (1 + |eps|/eps_sat)`` (S7).
+
+    A Michaelis-Menten-like saturation: ECS shrinkage and membrane interaction bound how
+    large the coherent volumetric strain can grow. For ``eps << eps_sat`` it returns
+    ``~eps`` (the direct neuromechanical strain sits far below any plausible cap, so this
+    is nearly inert -- which is itself the finding); for ``eps >> eps_sat`` it saturates
+    toward ``eps_sat``. ``None`` disables the cap (the prior strictly-linear model).
+    """
+    if saturation_strain is None:
+        return eps
+    return eps / (1.0 + abs(eps) / saturation_strain)
+
+
 def _content_band_survival(sigma_t: float, f_c: float) -> float:
     """Jitter low-pass ``exp(-2*pi^2*f_c^2*sigma_t^2)`` at the corner (section 3).
 
@@ -147,12 +161,45 @@ def mechanical_displacement(
             f"(Invariant 2), got {params.membrane_disp_m!r}"
         )
 
+    if not 0.0 < params.viscoelastic_factor <= 1.0:
+        raise ValueError(
+            f"viscoelastic_factor must lie in (0, 1], got {params.viscoelastic_factor!r}"
+        )
+    if not 0.0 <= params.carrier_modulation_depth <= 1.0:
+        raise ValueError(
+            "carrier_modulation_depth must lie in [0, 1], got "
+            f"{params.carrier_modulation_depth!r}"
+        )
+    if not 0.0 < params.correlation_coherent_fraction <= 1.0:
+        raise ValueError(
+            "correlation_coherent_fraction must lie in (0, 1], got "
+            f"{params.correlation_coherent_fraction!r}"
+        )
+    if params.saturation_strain is not None and params.saturation_strain <= 0.0:
+        raise ValueError(
+            f"saturation_strain must be positive or None, got {params.saturation_strain!r}"
+        )
+
     n = geom.neuron_count
     s = synchrony_fraction
     gate_len_m = geom.extent_axial_m
 
-    eps_coh = _volumetric_strain_coh(params, s)
+    eps_coh_raw = _volumetric_strain_coh(params, s)
     eps_incoh = _volumetric_strain_incoh(params, n, s)
+
+    # Honest source-physics attenuations of the coherent term, each once and each
+    # reducing to unity at its default: the viscoelastic transfer |H(f_c)| (S1, the
+    # tissue is not a static spring), the beta-carrier modulation depth (S3, only the
+    # rate-modulated fraction of the per-spike swelling lives at the carrier), and the
+    # mutually-phase-coherent fraction (S6, only cells within a correlation length add
+    # coherently). Then the strain saturation cap (S7). The incoherent pedestal is left
+    # as the raw in-band noise floor (it is not the binding detection floor).
+    source_transfer = (
+        params.viscoelastic_factor
+        * params.carrier_modulation_depth
+        * params.correlation_coherent_fraction
+    )
+    eps_coh = _saturate(eps_coh_raw * source_transfer, params.saturation_strain)
 
     # Isotropic (monopole / volume-change) axial term -- the original signal.
     axial_iso = _axial_from_strain(
@@ -198,6 +245,12 @@ def mechanical_displacement(
         f"kappa = {params.confinement_kappa}, eta = {params.dilatation_eta}, "
         f"f_cell = {params.cell_volume_fraction}, r = {params.cell_radius_m} m",
         f"sigma_t = {params.jitter_sigma_s} s, f_c = {params.content_freq_hz} Hz",
+        f"honest source-physics coherent-term attenuation = {source_transfer:.4g} "
+        f"(viscoelastic |H| {params.viscoelastic_factor}, carrier depth "
+        f"{params.carrier_modulation_depth}, coherent fraction "
+        f"{params.correlation_coherent_fraction}; S1/S3/S6), saturation "
+        f"{params.saturation_strain} (S7): coherent strain {eps_coh_raw:.4g} -> "
+        f"{eps_coh:.4g}",
         f"axial decomposition: isotropic {axial_iso:.4g} m + directional "
         f"{axial_dir:.4g} m (Q = {params.orientation_coherence})",
     )
@@ -215,6 +268,7 @@ def mechanical_displacement(
         isotropic_axial_m=axial_iso,
         directional_axial_m=axial_dir,
         orientation_coherence=params.orientation_coherence,
+        source_transfer_factor=source_transfer,
     )
 
 

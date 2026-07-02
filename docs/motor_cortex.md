@@ -97,6 +97,16 @@ abstracted. Pinned by [`test_motor_dynamics.py`](../tests/test_motor_dynamics.py
 - `β`, `Q_struct`, and the beam/column alignment `μ` are literature-motivated but
   **unmeasured** at the content band — like η, they are contestable inputs the model
   lets you sweep, not settled values.
+- The `motor_cortex()` preset now carries the **honest source-physics factors** (S1/S3/S6/S7:
+  viscoelastic transfer, carrier-modulation depth, coherent fraction, saturation) — see
+  [mechanics.md](mechanics.md). Combined with the sub-nm cited Δr, the direct M1 beta term is
+  ~0.1 nm.
+- `run_motor_demo()` is the honest Gate A: it drives M1 with a **bursty** beta rhythm
+  (`bursty_beta_drive` — beta is transient, not sustained, even under held demand) and scores
+  the **in-burst** synchrony (p90), so the burst-intermittency penalty is charged once, on the
+  acoustic side (the coherence-window cap), not twice. It returns both the content-band verdict
+  (`report.detection`, ≈ −65 dB) and the band-separated mechanism decomposition
+  (`report.mechanisms`: the large hemodynamic/fUS envelope vs the tiny beta carrier).
 
 ## Tests
 

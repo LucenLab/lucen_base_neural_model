@@ -23,6 +23,7 @@ from dataclasses import dataclass, replace
 
 from base_neural_model.activity.motor_drive import (
     MovementProfile,
+    bursty_beta_drive,
     movement_drive,
     sustained_imagery_drive,
 )
@@ -40,6 +41,12 @@ from base_neural_model.forward.detection import (
     AcquisitionParams,
     DetectionBudget,
     detection_budget,
+)
+from base_neural_model.forward.safety import echo_snr_within_safety
+from base_neural_model.mechanics.mechanisms import (
+    MechanismDecomposition,
+    MechanismParams,
+    decompose_mechanisms,
 )
 from base_neural_model.mechanics.neuron_constants import (
     get_single_neuron_displacement,
@@ -93,6 +100,11 @@ class NeuralModelReport:
     # AcquisitionParams is supplied; None keeps the model strictly source-side, and
     # the gates then score against the scalar unaberrated_floor_m as before.
     detection: DetectionBudget | None = None
+    # Band-separated source-mechanism decomposition (S2). Populated only when
+    # mechanism_params is supplied: the direct neuromechanical (beta content) term plus
+    # the slow osmotic + vascular (envelope) terms, so the content-vs-hemodynamic trade
+    # is explicit. ``detection`` scores the content-band (direct) term.
+    mechanisms: MechanismDecomposition | None = None
 
     @property
     def all_gates_pass(self) -> bool:
@@ -114,6 +126,8 @@ def run_neural_model(
     unaberrated_floor_m: float = DEFAULT_FLOOR_M,
     acquisition: AcquisitionParams | None = None,
     residual_clutter_m: float = 0.0,
+    synchrony_percentile: float | None = None,
+    mechanism_params: MechanismParams | None = None,
     drive_fn: Callable[[float], float] | None = None,
 ) -> NeuralModelReport:
     """Run the full activity -> mechanics model and return both deliverables.
@@ -147,7 +161,9 @@ def run_neural_model(
     activity = run_activity(
         params, duration_s=duration_s, fs_hz=fs_hz, drive_fn=drive_fn
     )
-    state = reduce_to_state(activity)
+    # ``synchrony_percentile`` scores a bursty trajectory at its in-burst synchrony (S4);
+    # None keeps the whole-record mean (the steady-rhythm default).
+    state = reduce_to_state(activity, synchrony_percentile=synchrony_percentile)
 
     # Deliverable (a): the activity-driven displacement timeseries + its spectrum.
     # Split the spectrum at the rhythm's own envelope/content edge (gamma splits at
@@ -162,20 +178,41 @@ def run_neural_model(
         d_single, geom, static_params, state.synchrony_fraction
     )
 
-    # Acoustic detection layer (Gate A / Stage 1): when an acquisition is supplied,
-    # derive the through-skull floor and fold the within-epoch integration gain into
-    # the signal. Scoring the gates against floor / sqrt(N_ens) is exactly equivalent
-    # to amplifying the signal by sqrt(N_ens), so the gates stay unchanged.
+    # Acoustic detection layer (Gate A / Stage 1): when an acquisition is supplied, the
+    # derived through-skull floor already carries ALL the receive-side coherent gain
+    # (sqrt(n_elements) beamforming + 1/sqrt(N_ens) integration), so the gates score the
+    # BARE static displacement directly against that full floor -- the same ratio as
+    # DetectionBudget.snr_db. (Dividing the floor by the integration gain here would
+    # re-apply the temporal sqrt(N_ens) that is already in it -- the double count.)
     detection: DetectionBudget | None = None
     if acquisition is None:
         amp_floor_m = unaberrated_floor_m
         content_floor_m = unaberrated_floor_m
     else:
+        # The content corner is passed so the clutter high-pass (D2) removes any carrier
+        # below its cutoff; the safety check (D6) flags an echo SNR above the transcranial
+        # MI/thermal ceiling.
         detection = detection_budget(
-            static, acquisition, residual_clutter_m=residual_clutter_m
+            static,
+            acquisition,
+            residual_clutter_m=residual_clutter_m,
+            content_freq_hz=state.content_freq_hz,
+            snr_exceeds_safety=not echo_snr_within_safety(acquisition),
         )
-        amp_floor_m = detection.floor_m / detection.integration_gain
-        content_floor_m = amp_floor_m
+        amp_floor_m = detection.floor_m
+        content_floor_m = detection.floor_m
+
+    # Band-separated source-mechanism decomposition (S2): the direct neuromechanical
+    # (beta content) term plus the slow osmotic + vascular (envelope/hemodynamic) terms.
+    mechanisms: MechanismDecomposition | None = None
+    if mechanism_params is not None:
+        mechanisms = decompose_mechanisms(
+            static,
+            geom,
+            confinement_kappa=static_params.confinement_kappa,
+            mech_params=mechanism_params,
+            saturation_strain=static_params.saturation_strain,
+        )
 
     # Gates score the static state (a one-element sweep).
     sweep = [static]
@@ -204,6 +241,7 @@ def run_neural_model(
         passes_dilatation_gate=dilat,
         provenance=provenance,
         detection=detection,
+        mechanisms=mechanisms,
     )
 
 
@@ -285,33 +323,39 @@ def run_motor_trial(
 
 def run_motor_demo(
     *,
-    drive_level: float = 1.3,
     acquisition: AcquisitionParams | None = None,
     residual_clutter_m: float = 0.0,
+    mechanism_params: MechanismParams | None = None,
+    burst_occupancy: float = 0.2,
+    burst_duration_s: float = 0.2,
+    synchrony_percentile: float = 90.0,
     duration_s: float = 8.0,
     fs_hz: float = 2000.0,
 ) -> NeuralModelReport:
-    """Run the **flagship-demo Gate A**: sustained motor imagery -> detectability verdict.
+    """Run the **flagship-demo Gate A**, with the honest source and acoustic physics.
 
-    The single call that *is* the demo's Stage-1 / Gate-A source sweep. It wires the M1
-    presets (beta-band E/I, columnar layer-5 mechanics, layer-5 voxel) with a
-    **sustained** motor-imagery drive (:func:`base_neural_model.activity.motor_drive.
-    sustained_imagery_drive`) -- high, stable synchrony held across the epoch, the
-    favorable source term -- and scores it through the acoustic detection layer against
-    the derived through-skull floor with the within-epoch integration gain folded in.
+    The single call that *is* the demo's Stage-1 / Gate-A source sweep, rewritten to the
+    honest defaults. It wires the M1 presets (beta-band E/I, columnar layer-5 mechanics
+    with the honest source-transfer factors, layer-5 voxel) with a **bursty** beta drive
+    (:func:`base_neural_model.activity.motor_drive.bursty_beta_drive`) -- sensorimotor
+    beta is transient, not sustained, even under held demand -- and scores it through the
+    honest acoustic detection layer (:meth:`AcquisitionParams.demo_motor`: burst-limited
+    coherent integration, aperture decoherence, residual aberration, clutter high-pass,
+    reverberation, and a safety-flagged echo SNR).
 
-    ``acquisition`` defaults to :meth:`AcquisitionParams.demo_motor` (a **1.5 s imaging
-    epoch** at 4 kHz -> ~x77 integration gain). This is the acoustic dwell that sets the
-    integration count ``N_ens`` and is independent of ``duration_s``, which is how long
-    the E/I dynamics are integrated to establish the *steady-state* synchrony the
-    sustained epoch holds. ``duration_s`` defaults to 8 s so the reported synchrony is
-    the sustained operating point (~0.96), not the cold-start ramp a 1.5 s window would
-    under-report (~0.81); the sustained drive is a held level, so integrating it longer
-    simply reaches steady state. Pass ``residual_clutter_m`` to test the clutter-limited
-    regime.
+    The bursty trajectory is reduced at its **in-burst** synchrony
+    (``synchrony_percentile``, default p90): a burst-locked acquisition integrates over
+    the burst, so the intermittency penalty is charged once, on the acoustic side, as the
+    coherence-window cap (``coherence_time_s`` = burst duration) -- NOT twice by also
+    diluting the synchrony with the between-burst troughs. ``mechanism_params`` (default
+    :class:`~base_neural_model.mechanics.mechanisms.MechanismParams`) adds the
+    band-separated osmotic + vascular envelope terms so ``report.mechanisms`` exposes the
+    content-band (direct beta) vs envelope (hemodynamic/fUS) trade; ``report.detection``
+    scores the content-band term. Pass ``residual_clutter_m`` for the clutter-limited
+    regime. See :meth:`AcquisitionParams.demo_motor_optimistic` for the prior baseline.
     """
     acq = acquisition or AcquisitionParams.demo_motor()
-    drive = sustained_imagery_drive(drive_level)
+    drive = bursty_beta_drive(occupancy=burst_occupancy, burst_duration_s=burst_duration_s)
     return run_neural_model(
         EIParams.motor_cortex(),
         geom=VoxelGeometry.motor_cortex_layer5(),
@@ -320,5 +364,7 @@ def run_motor_demo(
         fs_hz=fs_hz,
         acquisition=acq,
         residual_clutter_m=residual_clutter_m,
+        synchrony_percentile=synchrony_percentile,
+        mechanism_params=mechanism_params or MechanismParams(),
         drive_fn=drive,
     )

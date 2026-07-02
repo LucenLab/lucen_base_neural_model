@@ -27,6 +27,7 @@ import numpy as np
 from base_neural_model.base.provenance import Provenance
 from base_neural_model.base.types import MechanicalDisplacement
 from base_neural_model.forward.detection import AcquisitionParams, detection_budget
+from base_neural_model.forward.skull import skull_loss_from_freq
 
 
 @dataclass(frozen=True, eq=False)
@@ -99,7 +100,9 @@ def sweep_axis(
             f"swept axis = {axis_name} over [{vals.min():.4g}, {vals.max():.4g}], "
             f"{vals.size} points",
             f"residual clutter floor = {residual_clutter_m * 1e9:.4g} nm",
-            "SNR = surviving displacement (dz * survival * sqrt(N_ens)) / binding floor",
+            "SNR = bare surviving displacement (dz * survival) / binding floor "
+            "(the sqrt(n_elements) beamforming and 1/sqrt(N_ens) integration gains are "
+            "in the floor)",
         ),
         band=mech.band,
     )
@@ -131,11 +134,14 @@ class AxisSensitivity:
 
 
 # Literature-ish spans for the four acquisition axes (the acoustic-side analogue of the
-# Sobol bounds). echo SNR ~20-40 dB free-field; skull one-way ~4-20 dB at the temporal
-# window; epoch spans speech-unit to motor-imagery; clutter as a fraction of the phase
-# floor handled separately (it is not an AcquisitionParams field).
+# Sobol bounds). echo SNR ~20-40 dB free-field PER-ELEMENT; skull one-way ~4-20 dB at the
+# temporal window; epoch spans speech-unit to motor-imagery; clutter as a fraction of the
+# phase floor handled separately (it is not an AcquisitionParams field).
 DEFAULT_AXIS_SPANS: dict[str, tuple[float, float]] = {
-    "echo_snr_linear": (10.0 ** (20.0 / 10.0), 10.0 ** (40.0 / 10.0)),  # 20-40 dB
+    # 20-35 dB/elem: the upper end is bounded by the acoustic-output safety ceiling
+    # (D6, forward/safety.py) -- ~28 dB is safely reachable at the demo's 12 dB skull, so
+    # the old 40 dB top is not transcranially achievable within MI/thermal limits.
+    "echo_snr_linear": (10.0 ** (20.0 / 10.0), 10.0 ** (35.0 / 10.0)),
     "skull_loss_db_oneway": (4.0, 20.0),     # thin temporal bone .. thick/aberrated
     "epoch_s": (0.05, 2.0),                  # speech unit .. long motor-imagery epoch
     "frame_rate_hz": (1000.0, 8000.0),       # ultrafast plane/diverging-wave range
@@ -171,3 +177,73 @@ def acoustic_axis_ranking(
             )
         )
     return tuple(sorted(out, key=lambda a: a.db_span, reverse=True))
+
+
+def frequency_trade_curve(
+    mech: MechanicalDisplacement,
+    base_acq: AcquisitionParams,
+    freqs_hz: np.ndarray,
+    *,
+    bone_thickness_m: float | None = None,
+    residual_clutter_m: float = 0.0,
+) -> BudgetCurve:
+    """SNR vs centre frequency with skull loss COUPLED to frequency (D7).
+
+    Unlike :func:`sweep_axis` (which moves one field), this moves ``center_freq_hz`` and
+    drags ``skull_loss_db_oneway`` with it via
+    :func:`~base_neural_model.forward.skull.skull_loss_from_freq` -- the physical coupling
+    the two independent fields otherwise miss. It exposes the genuine two-sided trade: the
+    displacement sensitivity ``lambda/4pi`` improves with frequency (lower floor) while
+    bone attenuation rises steeply (higher floor). ``crossing_value`` is not the point
+    here; :func:`frequency_trade_optimum` finds the SNR-maximizing frequency.
+    """
+    vals = np.asarray(freqs_hz, dtype=float)
+    if vals.ndim != 1 or vals.size == 0:
+        raise ValueError(f"freqs_hz must be a non-empty 1-D array, got shape {vals.shape}")
+    thickness_kw = {} if bone_thickness_m is None else {"bone_thickness_m": bone_thickness_m}
+
+    snr_db = np.empty(vals.shape, dtype=float)
+    surviving = np.empty(vals.shape, dtype=float)
+    floor = np.empty(vals.shape, dtype=float)
+    denom: list[str] = []
+    for i, f in enumerate(vals):
+        loss = skull_loss_from_freq(float(f), **thickness_kw)
+        acq = replace(base_acq, center_freq_hz=float(f), skull_loss_db_oneway=loss)
+        b = detection_budget(mech, acq, residual_clutter_m=residual_clutter_m)
+        snr_db[i] = b.snr_db
+        surviving[i] = b.surviving_dz_m
+        floor[i] = b.floor_m
+        denom.append(b.limiting_denominator)
+
+    provenance = Provenance(
+        source="acoustic frequency trade: SNR vs centre frequency with skull loss "
+        "coupled to frequency (skull_loss_from_freq)",
+        assumptions=(
+            f"swept centre frequency over [{vals.min():.4g}, {vals.max():.4g}] Hz, "
+            f"{vals.size} points",
+            "one-way skull loss = alpha * f_MHz^n * L_cm (D7), coupling loss to frequency",
+            "lambda/4pi sensitivity improves with frequency; bone attenuation worsens "
+            "with frequency -- the two-sided trade",
+        ),
+        band=mech.band,
+    )
+    return BudgetCurve(
+        axis_name="center_freq_hz",
+        axis_values=vals,
+        snr_db=snr_db,
+        surviving_dz_m=surviving,
+        floor_m=floor,
+        limiting_denominator=tuple(denom),
+        provenance=provenance,
+    )
+
+
+def frequency_trade_optimum(curve: BudgetCurve) -> tuple[float, float]:
+    """The (frequency, SNR_dB) that maximizes detectability on a frequency-trade curve.
+
+    Returns the swept frequency with the largest ``snr_db`` and that SNR. An interior
+    maximum (not at an endpoint) is the signature of the real trade -- sensitivity gain
+    below it, attenuation loss above it.
+    """
+    idx = int(np.argmax(curve.snr_db))
+    return float(curve.axis_values[idx]), float(curve.snr_db[idx])

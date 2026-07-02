@@ -18,22 +18,28 @@ from base_neural_model.base.types import NeuronDisplacement
 
 # --- The cited figure -----------------------------------------------------------
 # Optical / full-field interferometric measurements of action-potential-correlated
-# membrane displacement report nanometre-scale motion. We take a defensible
-# mid-range content-band value; the provenance below records the source and the
-# assumptions a reviewer would challenge to move it.
-_CITED_DISPLACEMENT_M: float = 2.0e-9  # metres (~2 nm), content band
+# membrane displacement in MAMMALIAN neurons report SUB-nanometre motion (~0.2-0.4 nm);
+# the larger 0.5-5 nm figures are from giant (squid) axons, and 2.4 nm / 9 nm are
+# bilayer / whole-cell model estimates. The prior 2 nm was the optimistic top of that
+# spread. We take a defensible mammalian mid-to-upper value; the provenance records the
+# sources and the assumptions a reviewer would challenge to move it.
+CITED_DISPLACEMENT_MIN_M: float = 0.2e-9  # sub-nm mammalian lower edge (ACS Nano 2018)
+CITED_DISPLACEMENT_MAX_M: float = 0.4e-9  # mammalian upper edge (PNAS 2020, QPI)
+_CITED_DISPLACEMENT_M: float = 0.4e-9     # metres (~0.4 nm), content band, mammalian
 
 _CITED_PROVENANCE = Provenance(
-    source="Ling et al. 2020, Light: Sci. Appl. - optical action-potential "
-    "membrane displacement (nanometre scale)",
+    source="Yang et al. 2018 (ACS Nano) & Ling et al. 2020 (PNAS / Light: Sci. Appl.) "
+    "- optical action-potential membrane displacement; sub-nm in mammalian neurons",
     assumptions=(
-        "single-neuron AP membrane displacement is ~1-3 nm in vivo",
+        "single-neuron AP membrane displacement is ~0.2-0.4 nm in mammalian cells "
+        "(0.5-5 nm only in giant/squid axons; 2 nm was the optimistic prior value)",
         "the measured optical displacement is content-band (fast), not the slow "
         "rhythmic envelope",
-        "the figure transfers from the measured preparation to speech-cortex "
+        "the figure transfers from the measured preparation to speech-/motor-cortex "
         "pyramidal neurons without order-of-magnitude correction",
-        "displacement adds linearly per neuron before the synchrony model is "
-        "applied (no per-neuron saturation in the relevant regime)",
+        "displacement adds linearly per neuron up to the coherent-strain saturation "
+        "cap (see mechanics.transduction saturation_strain); no per-neuron saturation "
+        "below it",
     ),
     band=Band.CONTENT_FAST,
 )

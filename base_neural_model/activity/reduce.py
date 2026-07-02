@@ -13,6 +13,8 @@ directly and drive the mechanics without integrating any ODEs.
 
 from __future__ import annotations
 
+import numpy as np
+
 from base_neural_model.activity.jitter import total_jitter
 from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.activity.orientation import effective_orientation_coherence
@@ -22,10 +24,21 @@ from base_neural_model.base.provenance import extend
 from base_neural_model.base.types import NeuralState
 
 
-def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
+def reduce_to_state(
+    activity: ActivityTimeseries,
+    *,
+    synchrony_percentile: float | None = None,
+) -> NeuralState:
     """Collapse an :class:`ActivityTimeseries` to a :class:`NeuralState`.
 
-    * ``synchrony_fraction`` = the time-averaged Kuramoto order parameter ``mean r``;
+    * ``synchrony_fraction`` = the time-averaged Kuramoto order parameter ``mean r``,
+      or -- when ``synchrony_percentile`` is given -- that percentile of ``r(t)``. The
+      percentile is for a **bursty** trajectory (:func:`base_neural_model.activity.
+      motor_drive.bursty_beta_drive`): a burst-locked acquisition integrates over the
+      burst, so the relevant synchrony is the in-burst (high-percentile) value, NOT the
+      trough-diluted mean, which would double-count the burst-intermittency penalty that
+      the detection coherence window already charges (D1). ``None`` keeps the mean (the
+      default for a steady rhythm);
     * ``content_freq_hz`` = the dominant content-band oscillation frequency ``f_c``;
     * ``jitter_sigma_s`` = the total firing-time jitter at ``f_c``
       (:func:`total_jitter`): the synchrony-implied phase spread combined in quadrature
@@ -43,7 +56,15 @@ def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
     The band is ``CONTENT_FAST``: the reduced state is the content-band drive to the
     mechanics, never the slow envelope (Invariant 3).
     """
-    s = activity.mean_synchrony
+    if synchrony_percentile is None:
+        s = activity.mean_synchrony
+    else:
+        if not 0.0 < synchrony_percentile <= 100.0:
+            raise ValueError(
+                "synchrony_percentile must lie in (0, 100], got "
+                f"{synchrony_percentile!r}"
+            )
+        s = float(np.percentile(activity.r, synchrony_percentile))
     # The content corner must be a CONTENT-BAND carrier, not merely the overall
     # dominant peak: for an envelope-dominated signal (e.g. a movement event whose
     # desync/rebound structure dominates the spectrum) the overall peak lies in the
@@ -79,9 +100,13 @@ def reduce_to_state(activity: ActivityTimeseries) -> NeuralState:
             f"orientation coherence Q_eff = Q_struct {q_struct:.3g} x synchrony "
             f"{s:.3g} = {q_eff:.3g} (directional channel emerges from the activity)"
         )
+    s_label = (
+        "mean r" if synchrony_percentile is None
+        else f"p{synchrony_percentile:g} r (in-burst)"
+    )
     provenance = extend(
         activity.provenance,
-        f"reduced to NeuralState: s = mean r = {s:.3g}, f_c = {f_c:.3g} Hz, "
+        f"reduced to NeuralState: s = {s_label} = {s:.3g}, f_c = {f_c:.3g} Hz, "
         f"sigma_t = {sigma_t:.3g} s (phase spread at f_c + absolute floor, in "
         f"quadrature), mean rate = {activity.mean_firing_rate_hz:.3g} Hz",
         *extra,

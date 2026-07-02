@@ -32,6 +32,21 @@ _FLOOR_M = 1e-9
 _LOW_JITTER_S = 0.2e-3
 
 
+@pytest.fixture
+def d_single():
+    """Fixed test-scale single-neuron displacement for the resolution MACHINERY tests.
+
+    Pinned to the pre-revision 2 nm and decoupled from the honest cited constant
+    (~0.4 nm), so the shrink/boundary/density-floor assertions run in a non-degenerate
+    feasible window. The honest Delta r drives the demo verdict, not this machinery test.
+    """
+    from dataclasses import replace
+
+    from base_neural_model import get_single_neuron_displacement
+
+    return replace(get_single_neuron_displacement(), value_m=2e-9)
+
+
 def _params(eta: float, *, d_single) -> MechanicsParams:
     return replace(
         MechanicsParams.central(),

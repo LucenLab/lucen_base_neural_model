@@ -111,3 +111,53 @@ def sustained_imagery_drive(
         return drive_level * (1.0 - math.exp(-max(0.0, t) / ramp_s))
 
     return drive
+
+
+def bursty_beta_drive(
+    *,
+    occupancy: float = 0.2,
+    burst_duration_s: float = 0.2,
+    drive_high: float = 1.3,
+    drive_trough: float = 0.6,
+) -> Callable[[float], float]:
+    r"""Build an intermittent **bursty** beta drive ``P(t)`` (seconds -> drive; S4).
+
+    Sensorimotor beta is not a sustained oscillation: it occurs in brief **transient
+    bursts** (~150-300 ms) whose probability, not whose duration, tracks task demand --
+    sustained motor requirements do NOT prolong the bursts (eLife 80160; Rayson et al.
+    2022). This drive is therefore the honest replacement for :func:`sustained_imagery_
+    drive`'s constant hold: a train of Gaussian bursts at high drive on a sub-threshold
+    trough, with a duty cycle set by ``occupancy = burst_duration / period``.
+
+    Between bursts the drive falls to ``drive_trough`` (below the beta limit-cycle
+    threshold), so the population synchrony -- hence the displacement -- is intermittent.
+
+    **Pairing note (avoid double-counting the burst penalty).** The burst *intermittency*
+    is charged once, on the detection side, as the coherence-window cap on integration
+    (``AcquisitionParams.coherence_time_s`` = burst duration, D1: you can coherently
+    integrate over one burst, not the whole epoch). The synchrony that the burst-locked
+    acquisition integrates over is therefore the **in-burst** value, not the
+    trough-diluted whole-record mean -- so callers scoring detectability from a bursty
+    trajectory should reduce with an in-burst (high-percentile) synchrony
+    (:func:`base_neural_model.activity.reduce.reduce_to_state` ``synchrony_percentile``),
+    not the raw mean, which would penalize the bursts twice.
+    """
+    if not 0.0 < occupancy <= 1.0:
+        raise ValueError(f"occupancy must lie in (0, 1], got {occupancy!r}")
+    if burst_duration_s <= 0.0:
+        raise ValueError(f"burst_duration_s must be positive, got {burst_duration_s!r}")
+    if drive_high < drive_trough:
+        raise ValueError(
+            f"drive_high ({drive_high}) must be >= drive_trough ({drive_trough})"
+        )
+
+    period_s = burst_duration_s / occupancy
+    center = 0.5 * burst_duration_s
+    width = 0.35 * burst_duration_s
+
+    def drive(t: float) -> float:
+        phase = math.fmod(max(0.0, t), period_s)
+        bump = math.exp(-0.5 * ((phase - center) / width) ** 2)
+        return drive_trough + (drive_high - drive_trough) * bump
+
+    return drive

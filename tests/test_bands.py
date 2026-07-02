@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from base_neural_model import mechanical_displacement
+from base_neural_model import get_single_neuron_displacement, mechanical_displacement
 from base_neural_model.base.bands import Band, BandError, require_content_fast
 from base_neural_model.base.provenance import Provenance
 from base_neural_model.base.types import NeuronDisplacement
@@ -17,7 +17,11 @@ from base_neural_model.base.types import NeuronDisplacement
 
 def _neuron_with_band(band: Band) -> NeuronDisplacement:
     prov = Provenance(source="test", assumptions=("test",), band=band)
-    return NeuronDisplacement(value_m=2e-9, band=band, provenance=prov)
+    # Value pinned to the cited constant so the CONTENT_FAST case does not trip the
+    # single-entry guard against source_params.membrane_disp_m (Invariant 2).
+    return NeuronDisplacement(
+        value_m=get_single_neuron_displacement().value_m, band=band, provenance=prov
+    )
 
 
 def test_require_content_fast_passes_content():

@@ -23,72 +23,133 @@ base_neural_model/forward/
                  curves + the acoustic-side "which axis carries the verdict" ranking
 ```
 
-## The two acoustic factors
+## The receive-side coherent gains — two, orthogonal, each counted once
 
-The module recomputes **no** source physics — it composes two acoustic factors onto the
-existing `MechanicalDisplacement` (its `axial_displacement_m` and `content_band_survival`):
+The module recomputes **no** source physics. Detectability is one ratio — the **bare**
+surviving `Δz · survival` over the noise floor on estimating it — and **all** the
+receive-side coherent gain lives in that floor, in two orthogonal places so that no gain
+is ever counted twice. (This is the fix for a prior double-count: the signal was being
+amplified by `√N_ens` **and** the floor shrunk by `√N_ens`, applying the one temporal
+gain twice — a spurious +37.8 dB. The signal is now bare; the floor carries the averaging.)
 
-### 1. Within-epoch coherent integration — the demo's load-bearing advantage
+### 1. Temporal: within-epoch coherent integration — the demo's load-bearing advantage
 
-Ultrafast imaging collects `N_ens = f_frame · T_epoch` displacement samples per voxel per
-epoch; coherent integration over them gains amplitude SNR as `√N_ens`:
+Ultrafast imaging collects `N_ens = f_frame · T_epoch` estimates of the same quasi-static
+`Δz` per voxel per epoch; averaging them drops the estimate variance as `1/N_ens` (std as
+`1/√N_ens` — the Cramér–Rao result for a constant):
 
 ```
-integration_gain = √(f_frame · T_epoch)
+integration_gain = √(f_frame · T_epoch)     # appears ONLY as 1/√N_ens in the floor
 ```
 
 This is the **entire reason motor cortex is the favorable bet**: a 1.5 s motor-imagery
 epoch at 4 kHz gives N_ens = 6000 (**×77**), where a 50 ms speech unit gives N_ens = 200
-(**×14**). The model previously had no term for this and so scored Gate A against the
-*un-integrated* Δz — understating exactly the target the demo leads with. The
-`sustained_imagery_drive` ([`motor_drive.py`](../base_neural_model/activity/motor_drive.py))
-supplies the high, *stable* synchrony this integrates over (the opposite of
-`movement_drive`'s onset desync).
+(**×14**). The `sustained_imagery_drive`
+([`motor_drive.py`](../base_neural_model/activity/motor_drive.py)) supplies the high,
+*stable* synchrony this integrates over (the opposite of `movement_drive`'s onset desync).
 
-### 2. The phase-sensitive displacement floor (Walker–Trahey)
+### 2. Spatial: receive beamforming across the aperture
 
-Echo-phase displacement estimation has a variance floor set by echo SNR and wavelength:
+Delay-and-sum over the `n_elements`-element receive aperture (spec §4.2) coherently sums
+the signal (~`n_elements`) and incoherently sums the noise (~`√n_elements`), so the
+beamformed **voxel** echo SNR is `n_elements ×` the per-element echo SNR:
 
 ```
-σ_disp = (λ / 4π) · √(1 / (2·SNR_echo)) · (1 / √N_ens)        λ = c / f_N
+beamforming_gain = √n_elements          # appears ONCE, inside SNR_echo in the floor
+beamformed_echo_snr = n_elements · echo_snr_linear      # 256 × per-element
+```
+
+`echo_snr_linear` is therefore the **per-element (pre-beamforming)** echo SNR; the ×256
+aperture gain is applied explicitly in `through_skull_echo_snr_linear`, so it can never be
+silently baked in twice. This is orthogonal to §1 (that is temporal, across frames).
+
+### 3. The phase-sensitive displacement floor (Walker–Trahey) — where both gains live
+
+Echo-phase displacement estimation has a variance floor set by echo SNR and wavelength;
+both receive-side gains fold in here, each once:
+
+```
+σ_disp = (λ / 4π) · √(1 / (2 · n_elements · SNR_perelem_ts)) · (1 / √N_ens)     λ = c / f_N
 ```
 
 The `λ/4π` prefactor inverts the round-trip phase map `δφ = (4π f_N / c)·Δz` — at 2 MHz,
 6.13e-5 m/rad, so a 10 nm shift is ~1.6e-4 rad (a sixth of a milliradian — the spec's
-number). **Two-way skull loss** is applied inside the floor (`SNR_echo` scaled by
-`10^(−2·loss_dB/10)`), so the reported number is the *through-bone* floor. This is the
-**derived replacement for the old hand-set `DEFAULT_FLOOR_M` scalar.**
+number). **Two-way skull loss** is applied inside the floor (the beamformed `SNR_echo`
+scaled by `10^(−2·loss_dB/10)`), so the reported number is the *through-bone* floor. The
+`√n_elements` (spatial) sits inside `SNR_echo`; the `1/√N_ens` (temporal) is the trailing
+factor. This is the **derived replacement for the old hand-set `DEFAULT_FLOOR_M` scalar.**
 
 ## The budget and the binding denominator
 
 `detection_budget(mech, acq, residual_clutter_m=…)` returns a `DetectionBudget` carrying
-the surviving signal `Δz · survival · √N_ens`, the floor, the `snr_db`, and
-`limiting_denominator` — **"echo_snr" vs "clutter"** — which the spec's Gate B asks us to
-report (a clutter-limited result reframes the problem as engineering, not a physics wall).
-The binding floor is the worse of the Walker–Trahey echo-SNR floor and the optional
+the **bare** surviving signal `Δz · survival` (the `√n_elements` and `1/√N_ens` gains are
+in the floor, not the signal), the floor, the `snr_db`, and `limiting_denominator` —
+**"echo_snr" vs "clutter"** — which the spec's Gate B asks us to report (a clutter-limited
+result reframes the problem as engineering, not a physics wall). It also surfaces
+`integration_gain`, `beamforming_gain`, and `n_elements` for transparency. The binding
+floor is the worse of the Walker–Trahey echo-SNR floor and the optional
 post-clutter-filter residual.
 
 ## Wiring into the verdict
 
 `run_neural_model(..., acquisition=AcquisitionParams)` opts in: the amplitude /
-content-survival gates then score against the **derived** through-skull floor with the
-integration gain folded into the signal (`gates.py` is unchanged — scoring against
-`floor / √N_ens` is equivalent to amplifying the signal). With `acquisition=None` the
-model stays strictly source-side and the scalar-floor path is untouched.
+content-survival gates score the **bare** static Δz directly against the derived
+through-skull floor (which already carries both receive-side gains), the same ratio as
+`DetectionBudget.snr_db`. `gates.py` is unchanged. With `acquisition=None` the model stays
+strictly source-side and the scalar-floor path is untouched.
 
 `run_motor_demo()` is the single call that *is* the demo's Gate A: M1 presets + sustained
 imagery + `AcquisitionParams.demo_motor()`.
 
+## The honest-physics terms (D1–D9)
+
+Beyond the two coherent gains, `AcquisitionParams` carries an honest-physics extension,
+each field **inert by default** (a bare construction, or `demo_motor_optimistic()`,
+reproduces the prior attenuation-only, full-integration −13 dB baseline) and flipped on in
+`demo_motor()`:
+
+- **D1 — effective sample count.** `N_ens` is not `f_frame·T_epoch`: the signal stays
+  coherent only over a **beta burst** (`coherence_time_s`, ~200 ms), and ultrafast frames
+  **decorrelate** (`frame_decorrelation_time_s`, ~2 ms), so the *independent* looks are
+  `coherent_window / decorrelation_time` — for the demo ~100, not 6000 (×10, not ×77).
+- **D2 — clutter high-pass.** `clutter_highpass_hz` bounds the coherent window and removes
+  any content below its cutoff (a beta carrier survives; a slow envelope does not).
+- **D3 — residual-aberration phase noise.** `aberration_phase_rad` maps to a displacement
+  floor `(λ/4π)·φ_aber` added **in quadrature**, and it does **not** average with
+  integration (it is not an SNR term).
+- **D4 — aperture decoherence.** through an uncorrected skull only `aperture_coherence` of
+  the array sums coherently, so the beamforming gain uses `n_eff = aperture_coherence·n`.
+- **D5 — echo correlation ρ.** `echo_correlation` inflates the per-estimate floor by `1/ρ`.
+- **D6 — safety cap.** [`safety.py`](../base_neural_model/forward/safety.py) sets the
+  transcranial MI/thermal ceiling on the echo SNR; `snr_exceeds_safety` flags when the
+  assumed value (30 dB) is above the ~28 dB safely reachable at 12 dB skull.
+- **D7 — frequency-coupled skull loss.** [`skull.py`](../base_neural_model/forward/skull.py)
+  couples `skull_loss_db_oneway` to `center_freq_hz` (α ∝ fⁿ); `frequency_trade_curve`
+  resolves the sensitivity-vs-attenuation trade (the SNR-optimal readout is ~0.8 MHz, so
+  2 MHz is a resolution choice, not an SNR one).
+- **D8 — reverberation clutter.** `reverberation_ratio` adds a reverberation floor to the
+  clutter denominator.
+- **D9 — per-element vs post-beamforming.** `echo_snr_is_per_element` (default `True`) makes
+  the B1 commitment explicit: `False` removes the √n aperture gain (a −24 dB swing).
+
 ## The honest result
 
-At the conservative baseline (30 dB free-field echo SNR, 24 dB two-way skull loss), the
-motor source (~4.4 nm static, s≈0.96) lifts to **~303 nm surviving** after ×77
-integration against a **~280 nm** through-skull floor — **SNR ≈ +0.7 dB, echo-SNR-limited.**
-That is the spec's success criterion, right at its edge: *"within one order of magnitude
-of detectability"* — the demo now lands just *over* the floor rather than just under it,
-an engineering-sized margin produced from first principles rather than asserted. The
-un-integrated source alone (~4.4 nm) sits far under the floor, which is precisely why the
-integration term is load-bearing.
+Under the honest terms (`run_motor_demo()`, verified live), the flagship demo reports a
+**content-band verdict of ≈ −64.9 dB**, echo-SNR-limited: the bare direct-neuromechanical
+beta signal (~0.1 nm surviving, at the ~0.4 nm mammalian Δr, in-burst s ≈ 0.83) against a
+**~184 nm** through-skull floor — the floor raised from the old 17.5 nm by the burst-limited
+integration (×10 not ×77), the aperture decoherence (n_eff = 154), the echo correlation and
+the residual-aberration floor. This is **not** "within an order": the direct beta signal is
+~50 dB below the floor, and the honest stack strips ~52 dB off the old −13 dB. The prior
+−13 dB is preserved as `demo_motor_optimistic()` for the before/after audit.
+
+The **band-separated mechanism decomposition** (S2, `report.mechanisms`) makes the trade
+explicit: the slow **hemodynamic (vascular/CBV) envelope** is ~750 nm → **+12.8 dB**, orders
+larger than the direct term — but that is the **fUS signal** (cerebral blood volume), an
+envelope, not the specific beta carrier, and in a phase-displacement readout it is removed
+by the 1 Hz clutter high-pass (fUS instead uses power-Doppler, a different modality). So the
+honest reading is: the specific fast neuromechanical readout is far under, while the thing
+that *is* detectable is ordinary functional ultrasound.
 
 ## The budget sweep — where is the wall, and which axis carries the verdict
 
@@ -101,21 +162,28 @@ detection wall).
 `acoustic_axis_ranking` is the acoustic-side complement to the source-side Sobol collapse
 (`model/sensitivity.py`, which collapses onto η and s): a one-at-a-time local sensitivity
 ranking the four acquisition axes by their dB swing over their literature span. It leads
-with **skull loss and epoch** — the two strategic levers (the wall, and the motor
-integration advantage). At the demo baseline the wall sits at **~12.3 dB one-way (~24.7 dB
-two-way) skull loss**, so the demo's 12 dB assumption lands just short of it (+0.7 dB). SNR
-falls a clean **−2 dB per one-way skull dB** (two-way × 20 log₁₀).
+with **skull loss** (steepest — a squared, two-way, exponential-in-dB term), then **echo
+SNR**; **epoch** is now only weakly material, because the honest coherence window (D1) caps
+how much of a longer epoch actually integrates — sweeping the epoch past the ~200 ms burst
+barely moves the verdict. The clean **−2 dB per one-way skull dB** slope holds on the
+optimistic base; on the honest preset the integration-independent aberration floor (D3)
+flattens it at low skull loss. `frequency_trade_curve` (D7) adds the sensitivity-vs-
+attenuation trade with an interior optimum near ~0.8 MHz.
 
 [`scripts/plot_budget.py`](../scripts/plot_budget.py) renders both: SNR-vs-skull-loss at
 three echo-SNR levels with the wall and the demo point, plus the axis ranking.
 
 ## Tests
 
-[`test_detection.py`](../tests/test_detection.py) pins the ×14/×77 integration gain, the
-λ/4π prefactor and δφ(10 nm) spec cross-check, the floor's 1/√N_ens and 1/√SNR scaling,
-its rise with skull dB, and the echo-SNR↔clutter denominator flip.
-[`test_model_run.py`](../tests/test_model_run.py) pins the acquisition-wired verdict and
-that the motor demo lands within an order of the floor.
-[`test_budget.py`](../tests/test_budget.py) pins the −2 dB/dB skull slope, the 0 dB
-crossing, the clutter-denominator flip along a sweep, and the axis ranking leading with
-skull loss + epoch.
+[`test_detection.py`](../tests/test_detection.py) pins the honest terms on the inert base:
+the raw ×14/×77 vs the coherence/decorrelation-capped `N_ens` (D1), the echo-correlation
+floor (D5), the aberration quadrature floor that ignores integration (D3), the aperture-
+coherence erosion (D4), the clutter-high-pass content removal (D2), reverberation (D8), the
+per-element↔post-beamforming 24 dB swing (D9), and that the inert defaults reproduce the
+−13.03 dB baseline while the honest preset is materially worse.
+[`test_safety.py`](../tests/test_safety.py) pins the transcranial echo-SNR ceiling (D6).
+[`test_model_run.py`](../tests/test_model_run.py) pins the honest acquisition gains and the
+honest verdict: the content-band signal far under the floor while the hemodynamic envelope
+is large (S2). [`test_budget.py`](../tests/test_budget.py) pins the −2 dB/dB slope (inert
+base), the crossing, the clutter flip, the axis ranking (epoch now only weakly material),
+and the frequency-trade interior optimum (D7).
