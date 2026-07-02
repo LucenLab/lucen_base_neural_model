@@ -153,7 +153,10 @@ def run_activity(
     t, e, i = integrate_ei(
         params, duration_s=duration_s, fs_hz=fs_hz, drive_fn=drive_fn
     )
-    spectrum = analyze_oscillation(t, e)
+    # Split the spectrum at the rhythm's own envelope/content lower edge, so a gamma
+    # preset (band ~30-80 Hz) is not forced through the beta boundary. The motor presets
+    # carry the beta band, leaving their boundary at ~13 Hz unchanged.
+    spectrum = analyze_oscillation(t, e, boundary_hz=params.rhythm_band.f_lo_hz)
     r = _instantaneous_synchrony(
         e, phase_spread_hz=phase_spread_hz, coupling_gain=coupling_gain
     )

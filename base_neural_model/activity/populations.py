@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from base_neural_model.base.bands import Band
+from base_neural_model.base.bands import BETA_BAND, GAMMA_BAND, Band, RhythmBand
 from base_neural_model.base.provenance import Provenance
 
 
@@ -51,6 +51,12 @@ class EIParams:
     # perfectly columnar (e.g. layer-5 pyramidal cells). The activity expresses this
     # through the temporal synchrony to produce the orientation coherence Q_eff.
     structural_alignment: float = 0.0
+    # The rhythm's admissible content-frequency window. Its lower edge is the
+    # envelope/content boundary the oscillation analysis splits on, so a gamma preset
+    # (band ~30-80 Hz) is not forced through the beta lower edge and vice versa. Defaults
+    # to the beta box so the motor presets are unchanged; ``central`` overrides it to
+    # gamma. See :class:`base_neural_model.base.bands.RhythmBand`.
+    rhythm_band: RhythmBand = BETA_BAND
 
     def __post_init__(self) -> None:
         if self.tau_e_s <= 0.0 or self.tau_i_s <= 0.0:
@@ -95,6 +101,7 @@ class EIParams:
             theta_i=3.7,
             drive_e=1.5,    # tonic drive sustaining a high-amplitude gamma cycle
             drive_i=0.0,
+            rhythm_band=GAMMA_BAND,  # ~30-80 Hz: the gamma content box, not the beta one
             provenance=Provenance(
                 source=(
                     "Wilson & Cowan 1972 (E/I mean-field dynamics); gamma mechanism "

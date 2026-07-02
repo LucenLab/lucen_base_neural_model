@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.base.units import m_to_nm
 from base_neural_model.model.run import run_motor_cortex, run_neural_model
 
@@ -81,8 +80,11 @@ def build_figure(*, preset: str = "gamma"):
     # --- Panel 3: content-band spectrum of dz(t) -------------------------------
     nonzero = spec.freqs_hz > 0
     ax2.semilogy(spec.freqs_hz[nonzero], spec.power[nonzero], lw=1.3, color="#756bb1")
-    ax2.axvline(ENVELOPE_CONTENT_BOUNDARY_HZ, color="#c0392b", ls=":", lw=1.3)
-    ax2.text(ENVELOPE_CONTENT_BOUNDARY_HZ + 1, ax2.get_ylim()[1] * 0.3,
+    # The content/envelope split line is the rhythm's own boundary (per-preset:
+    # ~30 Hz gamma, ~13 Hz beta), carried on the spectrum the model computed.
+    boundary_hz = spec.boundary_hz
+    ax2.axvline(boundary_hz, color="#c0392b", ls=":", lw=1.3)
+    ax2.text(boundary_hz + 1, ax2.get_ylim()[1] * 0.3,
              "envelope | content", color="#c0392b", fontsize=8, rotation=90,
              va="top")
     ax2.set_xlim(0, 120)

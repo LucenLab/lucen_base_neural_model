@@ -150,8 +150,10 @@ def run_neural_model(
     state = reduce_to_state(activity)
 
     # Deliverable (a): the activity-driven displacement timeseries + its spectrum.
+    # Split the spectrum at the rhythm's own envelope/content edge (gamma splits at
+    # ~30 Hz, beta at ~13 Hz), consistent with the activity-side split in run_activity.
     ts = displacement_timeseries(activity, state, geom, base_mechanics, d_single)
-    spectrum = displacement_spectrum(ts)
+    spectrum = displacement_spectrum(ts, boundary_hz=params.rhythm_band.f_lo_hz)
 
     # Deliverable (b): the static displacement at the state's mean synchrony, with the
     # state's jitter/content corner stamped on, so it equals the timeseries at s.

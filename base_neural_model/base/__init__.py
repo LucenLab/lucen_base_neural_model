@@ -5,7 +5,15 @@ unit handling, the temporal-band guard, provenance propagation, and the typed da
 contracts that cross the activity -> mechanics -> gates boundary.
 """
 
-from base_neural_model.base.bands import Band, require_content_fast
+from base_neural_model.base.bands import (
+    BETA_BAND,
+    GAMMA_BAND,
+    HIGH_BETA_BAND,
+    LOW_BETA_BAND,
+    Band,
+    RhythmBand,
+    require_content_fast,
+)
 from base_neural_model.base.provenance import Provenance, extend, merge
 from base_neural_model.base.types import (
     MechanicalDisplacement,
@@ -17,6 +25,11 @@ from base_neural_model.base.types import (
 
 __all__ = [
     "Band",
+    "RhythmBand",
+    "BETA_BAND",
+    "HIGH_BETA_BAND",
+    "LOW_BETA_BAND",
+    "GAMMA_BAND",
     "require_content_fast",
     "Provenance",
     "merge",

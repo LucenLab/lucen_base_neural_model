@@ -16,14 +16,19 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# Content/envelope boundary (Hz). Below this is slow sub-rhythm modulation (the
-# movement envelope / mu-band timing); at/above it is the beta content band the
-# mechanics target. Set at the sensorimotor beta lower edge (~13 Hz, Kilavik et al.
-# 2013) so it sits BELOW the modelled low-beta fundamental (~15 Hz) and never amputates
-# it -- the earlier 16 Hz value was a speech envelope/content line that wrongly excluded
-# a legitimate low-beta carrier, forcing f_c onto a harmonic. The content corner itself
-# is the dominant oscillatory peak (the fundamental), taken as the global non-DC peak.
-ENVELOPE_CONTENT_BOUNDARY_HZ: float = 13.0
+from base_neural_model.base.bands import BETA_BAND
+
+# Default content/envelope boundary (Hz). Below this is slow sub-rhythm modulation (the
+# movement envelope / mu-band timing); at/above it is the content band the mechanics
+# target. This is the *beta* default (the sensorimotor beta lower edge, ~13 Hz, Kilavik
+# et al. 2013) -- it sits BELOW the modelled low-beta fundamental (~15 Hz) and never
+# amputates it (the earlier 16 Hz speech line wrongly excluded a legitimate low-beta
+# carrier, forcing f_c onto a harmonic). It is no longer the only boundary: each rhythm
+# supplies its own via a :class:`~base_neural_model.base.bands.RhythmBand` (a gamma run
+# splits at ~30 Hz), threaded through ``analyze_oscillation``'s ``boundary_hz``. The
+# content corner itself is the dominant oscillatory peak (the fundamental), taken as the
+# global non-DC peak.
+ENVELOPE_CONTENT_BOUNDARY_HZ: float = BETA_BAND.f_lo_hz
 
 # Minimum share of (non-DC) oscillation power the content band must hold for its peak to
 # count as a real content carrier. Above FFT-leakage noise (a strong slow envelope leaks

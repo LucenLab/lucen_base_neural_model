@@ -32,7 +32,9 @@ Because ``exp(-2 pi^2 f^2 sigma_t^2)`` is monotonically gentler at low ``f``, ``
 maximized by admitting the lowest-frequency content available. Left unconstrained that
 walks down to the slow envelope fundamental -- which is not a content carrier. The
 binding constraint is therefore **physical admissibility**: the band must lie in the
-sensorimotor beta range (:data:`BETA_LO_HZ` .. :data:`BETA_HI_HZ`). The optimum is thus
+rhythm's own admissible window -- a :class:`~base_neural_model.base.bands.RhythmBand`
+passed as ``band=`` (the sensorimotor beta box :data:`BETA_BAND` by default, a gamma box
+for a generic column). The optimum is thus
 constraint-bound (it sits at the bottom of the admissible beta window and as wide as
 the rhythmic power extends), which is itself the finding: for a jitter-limited motor
 readout you want the *lowest beta-band* content, not the highest.
@@ -63,14 +65,18 @@ import numpy as np
 
 from base_neural_model.activity.jitter import ABSOLUTE_JITTER_FLOOR_S, total_jitter
 from base_neural_model.activity.timeseries import ActivityTimeseries
+from base_neural_model.base.bands import BETA_BAND, RhythmBand
 from base_neural_model.forward.detection import AcquisitionParams, phase_displacement_floor
 
-# Physical admissibility for a motor content carrier: the sensorimotor beta band. Below
-# BETA_LO_HZ is the mu-rhythm / envelope (not a content carrier); above BETA_HI_HZ the
-# beta harmonics carry negligible power. The optimizer may place the window anywhere in
-# this box but cannot collapse onto the ~6-7 Hz envelope fundamental (< BETA_LO_HZ).
-BETA_LO_HZ: float = 13.0    # sensorimotor beta lower edge (Kilavik et al. 2013)
-BETA_HI_HZ: float = 30.0    # sensorimotor beta upper edge
+# Physical admissibility for a content carrier is now a per-rhythm :class:`RhythmBand`
+# (see :mod:`base_neural_model.base.bands`): the sensorimotor beta box for a motor
+# rhythm, the gamma box for a generic column. The optimizers below default to
+# ``BETA_BAND`` so existing motor callers are unchanged, but take a ``band=`` argument
+# so a gamma (or high-/low-beta) run supplies its own window and the beta ceiling never
+# clamps it. Below ``band.f_lo_hz`` is the mu-rhythm / envelope (not a content carrier);
+# above ``band.f_hi_hz`` the harmonics carry negligible power.
+BETA_LO_HZ: float = BETA_BAND.f_lo_hz  # sensorimotor beta lower edge (Kilavik 2013)
+BETA_HI_HZ: float = BETA_BAND.f_hi_hz  # sensorimotor beta upper edge
 MIN_BANDWIDTH_HZ: float = 3.0  # a band narrower than this is a line, not a band
 
 
@@ -188,14 +194,14 @@ def _make_result(
 
 
 def _admissible_edges(
-    ts: ActivityTimeseries, *, step_hz: float | None
+    ts: ActivityTimeseries, *, step_hz: float | None, band: RhythmBand
 ) -> np.ndarray:
-    """Candidate band edges on the run's own FFT grid, within the beta box."""
+    """Candidate band edges on the run's own FFT grid, within the rhythm's box."""
     f = ts.spectrum.freqs_hz
     step = step_hz if step_hz is not None else float(f[1] - f[0])
-    grid = f[(f >= BETA_LO_HZ) & (f <= BETA_HI_HZ) & (f > 0)]
+    grid = f[(f >= band.f_lo_hz) & (f <= band.f_hi_hz) & (f > 0)]
     if grid.size == 0:
-        grid = np.arange(BETA_LO_HZ, BETA_HI_HZ + step, step)
+        grid = np.arange(band.f_lo_hz, band.f_hi_hz + step, step)
     return grid
 
 
@@ -226,13 +232,16 @@ def optimize_individual_bands(
     coherent_dz_m: float,
     floor_s: float = ABSOLUTE_JITTER_FLOOR_S,
     step_hz: float | None = None,
+    band: RhythmBand = BETA_BAND,
 ) -> BandResult:
     r"""1-D problem: the single best content band ``[f_lo, f_hi]`` for ONE preset.
 
-    Exhaustively searches admissible beta-box windows on the run's FFT grid and returns
-    the one whose detection SNR is largest. The per-rhythm ceiling.
+    Exhaustively searches admissible windows on the run's FFT grid -- within ``band``,
+    the rhythm's own admissible box (:data:`BETA_BAND` by default; pass a gamma band for
+    a gamma run so the beta ceiling never clamps it) -- and returns the one whose
+    detection SNR is largest. The per-rhythm ceiling.
     """
-    edges = _admissible_edges(ts, step_hz=step_hz)
+    edges = _admissible_edges(ts, step_hz=step_hz, band=band)
     lo, hi, _ = _search(
         lambda a, b: band_snr_db(ts, acq, a, b, coherent_dz_m=coherent_dz_m, floor_s=floor_s),
         edges,
@@ -290,6 +299,7 @@ def optimize_shared_band(
     coherent_dz_m: dict[str, float],
     floor_s: float = ABSOLUTE_JITTER_FLOOR_S,
     step_hz: float | None = None,
+    band: RhythmBand = BETA_BAND,
 ) -> SharedBandResult:
     r"""2-D problem: ONE band ``[f_lo, f_hi]`` serving several presets (maximin).
 
@@ -305,7 +315,7 @@ def optimize_shared_band(
         raise ValueError("need at least one preset run")
     names = list(runs)
     ref = runs[names[0]]
-    edges = _admissible_edges(ref, step_hz=step_hz)
+    edges = _admissible_edges(ref, step_hz=step_hz, band=band)
 
     def worst(a: float, b: float) -> float:
         return min(

@@ -19,7 +19,6 @@ import argparse
 from pathlib import Path
 
 from base_neural_model.activity import run_activity
-from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.activity.populations import EIParams
 
 # The three cited rhythm presets, by band.
@@ -34,8 +33,12 @@ def build_figure(*, preset: str = "gamma"):
     import matplotlib.pyplot as plt
 
     ei_factory, label = _PRESETS[preset]
-    ts = run_activity(ei_factory())
+    ei = ei_factory()
+    ts = run_activity(ei)
     spec = ts.spectrum
+    # The envelope/content boundary is the rhythm's own lower edge (gamma splits at
+    # ~30 Hz, beta at ~13 Hz), so the plotted split follows the preset.
+    boundary_hz = ei.rhythm_band.f_lo_hz
 
     fig = plt.figure(figsize=(14, 4.6), constrained_layout=True)
     fig.suptitle(
@@ -71,8 +74,8 @@ def build_figure(*, preset: str = "gamma"):
     # --- Panel 3: power spectrum of E(t) with the content/envelope split -------
     nonzero = spec.freqs_hz > 0
     ax2.semilogy(spec.freqs_hz[nonzero], spec.power[nonzero], lw=1.3, color="#756bb1")
-    ax2.axvline(ENVELOPE_CONTENT_BOUNDARY_HZ, color="#c0392b", ls=":", lw=1.3)
-    ax2.text(ENVELOPE_CONTENT_BOUNDARY_HZ + 1, ax2.get_ylim()[1] * 0.3,
+    ax2.axvline(boundary_hz, color="#c0392b", ls=":", lw=1.3)
+    ax2.text(boundary_hz + 1, ax2.get_ylim()[1] * 0.3,
              "envelope | content", color="#c0392b", fontsize=8, rotation=90,
              va="top")
     ax2.axvline(spec.dominant_freq_hz, color="#16a085", ls="--", lw=1.2,
