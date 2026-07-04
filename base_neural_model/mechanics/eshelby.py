@@ -143,6 +143,77 @@ def eshelby_kappa_from(matrix: MatrixParams) -> float:
     return eshelby_kappa(matrix.poisson_ratio, matrix.aspect_ratio)
 
 
+# --- Finite volume fraction: inclusion-inclusion interaction (Mori-Tanaka bounds) -----
+# eshelby_kappa is the SINGLE-inclusion (dilute) limit: each cell's local strain field is
+# undisturbed by its neighbours. At the model's operating cell_volume_fraction ~ 0.15
+# (base.types presets) that limit is at the conventional dilute/interacting boundary, so
+# the neglected interaction is a live question, not obviously zero. These two functions
+# BOUND the correction instead of asserting it away.
+#
+# The problem is the HOMOGENEOUS-eigenstrain case (cells share the matrix stiffness and
+# carry a swelling eigenstrain), NOT the inhomogeneity/stiffness-mismatch case whose
+# famous Mori-Tanaka result kappa_d/(1 - f(1 - kappa_d)) is a DIFFERENT problem. For the
+# eigenstrain case the standard Mori-Tanaka closure (each inclusion sees the average
+# matrix strain, eps_incl = <eps>_matrix + S:eps*) yields two forms that differ only by the
+# macroscopic boundary condition and BRACKET the real embedded voxel:
+#   * traction-free (<sigma> = 0, free to swell):  kappa = f + (1 - f) kappa_d   [UP]
+#   * displacement-clamped (<eps> = 0, rigid):     kappa = (1 - f) kappa_d       [DOWN]
+# Both are self-consistent and both reduce to kappa_d at f = 0 (Voigt/Reuss-style bounds).
+
+
+def mori_tanaka_kappa_traction_free(kappa_dilute: float, f: float) -> float:
+    """Upper Mori-Tanaka kappa bound: a traction-free (freely swelling) voxel.
+
+    ``kappa = f + (1 - f) * kappa_dilute`` -- each inclusion sees the average matrix
+    strain of a composite under zero macroscopic stress, so neighbours swelling into the
+    shared matrix RELIEVE a cell's constraint and it realizes MORE of its eigenstrain.
+    Monotone up from ``kappa_dilute`` at ``f = 0`` to 1 at ``f = 1`` (all-inclusion,
+    freely swelling -> full eigenstrain realized). The upper edge of the interaction
+    bracket for the homogeneous eigenstrain problem.
+    """
+    if not 0.0 <= kappa_dilute <= 1.0 + 1e-9:
+        raise ValueError(f"kappa_dilute must lie in [0, 1], got {kappa_dilute!r}")
+    if not 0.0 <= f < 1.0:
+        raise ValueError(f"f (volume fraction) must lie in [0, 1), got {f!r}")
+    return f + (1.0 - f) * kappa_dilute
+
+
+def mori_tanaka_kappa_clamped(kappa_dilute: float, f: float) -> float:
+    """Lower Mori-Tanaka kappa bound: a displacement-clamped (rigidly embedded) voxel.
+
+    ``kappa = (1 - f) * kappa_dilute`` -- each inclusion sees the average matrix strain of
+    a composite held at zero macroscopic strain, so a cell swelling must push the matrix
+    into compensating compression and realizes LESS of its eigenstrain. Monotone down from
+    ``kappa_dilute`` at ``f = 0`` to 0 at ``f = 1`` (all-inclusion, rigidly held -> no net
+    dilatation). The lower edge of the interaction bracket for the homogeneous eigenstrain
+    problem.
+    """
+    if not 0.0 <= kappa_dilute <= 1.0 + 1e-9:
+        raise ValueError(f"kappa_dilute must lie in [0, 1], got {kappa_dilute!r}")
+    if not 0.0 <= f < 1.0:
+        raise ValueError(f"f (volume fraction) must lie in [0, 1), got {f!r}")
+    return (1.0 - f) * kappa_dilute
+
+
+def interaction_verdict_shift_db(f: float) -> float:
+    """Max |dB| shift the interaction bracket imposes on the (kappa-linear) verdict.
+
+    The source term is linear in kappa (``Delta z = eta kappa L eps_V``), so a kappa
+    factor ``r`` shifts the dB verdict by ``20 log10(r)``. The widest excursion is the
+    clamped lower bound's factor ``(1 - f)``, whose ``|20 log10(1 - f)|`` is INDEPENDENT
+    of ``kappa_dilute`` -- so this single number bounds the interaction effect at any kappa
+    anchor. ~1.4 dB at ``f = 0.15`` (the operating fraction), ~3.1 dB at ``f = 0.30``:
+    negligible against the model's ~-65 dB verdict and the ~60 dB (3-decade) eta span, so
+    the dilute kappa is used rather than a Mori-Tanaka midpoint (which would inject the
+    boundary-condition ambiguity for a sub-1.4 dB effect).
+    """
+    if not 0.0 <= f < 1.0:
+        raise ValueError(f"f (volume fraction) must lie in [0, 1), got {f!r}")
+    if f == 0.0:
+        return 0.0
+    return abs(20.0 * math.log10(1.0 - f))
+
+
 def eshelby_provenance(nu: float, aspect_ratio: float = 1.0) -> tuple[str, ...]:
     """Assumption strings the sweep layer appends when kappa is Eshelby-derived."""
     return (
@@ -152,6 +223,9 @@ def eshelby_provenance(nu: float, aspect_ratio: float = 1.0) -> tuple[str, ...]:
         f"matrix Poisson ratio nu = {nu} (undrained/fast-band value; Su et al. "
         "2023 report nu_u > 0.49 in the short-time regime -> kappa near confined)",
         f"inclusion aspect ratio a3/a1 = {aspect_ratio} (1 = spherical cell)",
-        "isotropic matrix; single-inclusion (dilute) limit -- inclusion-inclusion "
-        "interaction neglected",
+        "isotropic matrix; single-inclusion (dilute) kappa, with inclusion-inclusion "
+        "interaction BOUNDED (Mori-Tanaka traction-free/clamped closures, "
+        "mori_tanaka_kappa_*) and shown to shift the kappa-linear verdict by "
+        "<= |20 log10(1-f)| ~ 1.4 dB at the operating f ~ 0.15 -- negligible vs the "
+        "eta/synchrony drivers, so the dilute kappa is used",
     )

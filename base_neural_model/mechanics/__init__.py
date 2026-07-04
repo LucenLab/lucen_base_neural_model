@@ -21,6 +21,9 @@ from base_neural_model.mechanics.eshelby import (
     eshelby_provenance,
     eshelby_sphere_components,
     eshelby_spheroid_trace,
+    interaction_verdict_shift_db,
+    mori_tanaka_kappa_clamped,
+    mori_tanaka_kappa_traction_free,
 )
 from base_neural_model.mechanics.neuron_constants import (
     get_single_neuron_displacement,
@@ -64,6 +67,9 @@ __all__ = [
     "eshelby_sphere_components",
     "eshelby_spheroid_trace",
     "eshelby_provenance",
+    "mori_tanaka_kappa_traction_free",
+    "mori_tanaka_kappa_clamped",
+    "interaction_verdict_shift_db",
     # eta from the poroelastic drainage state
     "PoroelasticParams",
     "poroelastic_eta",

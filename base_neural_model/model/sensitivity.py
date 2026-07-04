@@ -157,6 +157,8 @@ def model_verdict_scalar(
     names: tuple[str, ...],
     d_single: NeuronDisplacement,
     voxel: VoxelGeometry,
+    *,
+    synchrony_from_drive_kwargs: Mapping[str, float] | None = None,
 ) -> float:
     """Model output for one parameter vector: the Gate-1 proxy verdict scalar.
 
@@ -166,6 +168,13 @@ def model_verdict_scalar(
     ``axial_displacement_m * content_band_survival`` (the Gate-1 amplitude proxy,
     used because Modules 2/3 are not yet implemented). Synchrony is itself a swept
     factor, so the scalar is evaluated at that row's synchrony, not a sweep peak.
+
+    ``synchrony_from_drive_kwargs`` overrides the ``with_activity`` space's
+    ``drive_threshold``/``coupling_gain`` (default ``None`` -> the module's calibrated
+    constants, unchanged production behaviour). This exists so a robustness check can
+    re-run the Sobol collapse under a perturbed calibration -- see
+    :func:`base_neural_model.activity.synchrony.synchrony_from_drive`'s documented
+    RMS/max residual against the real ODE.
     """
     if not isinstance(sample_row, Mapping):
         sample_row = dict(zip(names, np.asarray(sample_row, dtype=float), strict=True))
@@ -178,6 +187,7 @@ def model_verdict_scalar(
         synchrony = synchrony_from_drive(
             float(sample_row["drive_e"]),
             phase_spread_hz=float(sample_row["phase_spread_hz"]),
+            **(synchrony_from_drive_kwargs or {}),
         )
 
     matrix = MatrixParams(poisson_ratio=float(sample_row["poisson_ratio"]))
@@ -222,6 +232,7 @@ def run_model_sobol(
     problem: SobolProblem | None = None,
     n_base: int = 1024,
     seed: int | None = 0,
+    synchrony_from_drive_kwargs: Mapping[str, float] | None = None,
 ) -> SobolIndices:
     """Run the Sobol analysis over the source factor space.
 
@@ -230,13 +241,24 @@ def run_model_sobol(
     :func:`model_verdict_scalar` on each, and estimates S1/ST with SALib. The
     returned indices are the demonstration that the verdict collapses onto the
     eta-driver (``log10_permeability``) and ``synchrony``.
+
+    ``synchrony_from_drive_kwargs`` is forwarded to :func:`model_verdict_scalar` (only
+    material for the ``with_activity`` factor space, which is the one path that calls
+    the drive->synchrony surrogate); default ``None`` leaves production behaviour
+    unchanged.
     """
     problem = problem or SobolProblem.default()
     salib_problem = problem.to_salib()
 
     samples = sobol_sample.sample(salib_problem, n_base, seed=seed)
     Y = np.array(
-        [model_verdict_scalar(row, problem.names, d_single, voxel) for row in samples]
+        [
+            model_verdict_scalar(
+                row, problem.names, d_single, voxel,
+                synchrony_from_drive_kwargs=synchrony_from_drive_kwargs,
+            )
+            for row in samples
+        ]
     )
 
     result = sobol_analyze.analyze(salib_problem, Y, seed=seed)

@@ -113,7 +113,19 @@ class MechanicsParams:
     membrane_disp_m: float       # Delta r: radial membrane displacement, metres
     cell_radius_m: float         # r: characteristic cell radius, metres
     cell_volume_fraction: float  # f_cell = n * V_cell, dimensionless in [0, 1]
-    confinement_kappa: float     # kappa: axial partition of dilatation, [1/3, 1]
+    # kappa: axial partition of dilatation, [1/3, 1]. When Eshelby-derived
+    # (eshelby.eshelby_kappa_from, used by the Sobol/derive.py path) this comes from
+    # an UNDRAINED/fast-band matrix Poisson ratio nu -> 0.5 (Su et al. 2023), the
+    # incompressible limit where the volumetric Eshelby trace is forced toward the
+    # confined value kappa -> 1. This is DELIBERATELY a different effective nu than
+    # matrix_poisson_ratio below (0.2, feeding the deviatoric/directional channel):
+    # incompressibility confines volume change but does NOT suppress shape change at
+    # constant volume (orientation.deviatoric_eshelby_response is only weakly
+    # nu-dependent, 0.53 at nu=0 to 0.4 at nu->0.5), so the two channels are governed
+    # by genuinely different effective moduli of the same tissue at the same instant,
+    # not an inconsistency to reconcile. See orientation.py's module docstring and
+    # deviatoric_eshelby_response for the derivation.
+    confinement_kappa: float
     dilatation_eta: float        # eta: net-dilatation fraction, [0, 1]
     jitter_sigma_s: float        # sigma_t: firing-time jitter SD, seconds
     content_freq_hz: float       # f_c: content-band corner frequency, Hz
@@ -125,7 +137,9 @@ class MechanicsParams:
     anisotropy: float = 0.0              # beta: per-cell deviatoric fraction, [0, 1]
     orientation_coherence: float = 0.0   # Q: orientation order parameter, [0, 1]
     mean_axis_projection: float = 1.0    # mu = (director . beam axis), [-1, 1]
-    matrix_poisson_ratio: float = 0.2    # nu for the deviatoric Eshelby response
+    # nu for the deviatoric Eshelby response ONLY (orientation.py); see the note on
+    # confinement_kappa above for why this legitimately differs from kappa's nu.
+    matrix_poisson_ratio: float = 0.2
     # --- Honest source-physics factors (S1, S3, S6, S7); defaults are all INERT -------
     # Each attenuates the coherent axial term for a distinct physical reason; at their
     # defaults the chain reduces exactly to the prior lossless, quasi-static, fully
@@ -184,7 +198,8 @@ class MechanicsParams:
             matrix_poisson_ratio=0.2,
             # Honest source-physics factors (flipped on for the demo preset; contestable
             # inputs like eta). At the generic column these stay inert (central()).
-            viscoelastic_factor=0.59,          # |H(20 Hz)|, springpot tau=3 ms, a=0.3 (S1)
+            viscoelastic_factor=0.8644,        # |H(20 Hz)|, springpot tau=3 ms, a=0.88
+                                                # (Testu et al. 2017 MRE exponent) (S1)
             carrier_modulation_depth=0.5,      # beta-carrier modulation depth (S3)
             correlation_coherent_fraction=0.7,  # mutually phase-coherent fraction (S6)
             saturation_strain=1.0e-2,          # ECS/membrane strain cap (S7; non-binding here)

@@ -17,22 +17,39 @@ from base_neural_model.base.provenance import Provenance
 from base_neural_model.base.types import NeuronDisplacement
 
 # --- The cited figure -----------------------------------------------------------
-# Optical / full-field interferometric measurements of action-potential-correlated
-# membrane displacement in MAMMALIAN neurons report SUB-nanometre motion (~0.2-0.4 nm);
-# the larger 0.5-5 nm figures are from giant (squid) axons, and 2.4 nm / 9 nm are
-# bilayer / whole-cell model estimates. The prior 2 nm was the optimistic top of that
-# spread. We take a defensible mammalian mid-to-upper value; the provenance records the
-# sources and the assumptions a reviewer would challenge to move it.
-CITED_DISPLACEMENT_MIN_M: float = 0.2e-9  # sub-nm mammalian lower edge (ACS Nano 2018)
-CITED_DISPLACEMENT_MAX_M: float = 0.4e-9  # mammalian upper edge (PNAS 2020, QPI)
-_CITED_DISPLACEMENT_M: float = 0.4e-9     # metres (~0.4 nm), content band, mammalian
+# Both source papers measure MAMMALIAN neurons and report displacement at TWO spatial
+# scales that are the same underlying motion, not competing measurements: a LOCAL peak
+# at one point on the membrane (Yang: regions individually +/-; Ling: soma local peaks
+# +1.4/-1.8 nm, neurite +0.9/-0.7 nm), and a WHOLE-CELL spatially-averaged magnitude
+# after summing those same regions WITH their sign (Yang: "~0.2 nm... averaged value
+# over the entire neuron"; Ling: "mean absolute displacement" 0.4 nm for soma). Because
+# different regions of one cell move in opposite directions at the same instant (Yang:
+# "region 1... negative... region 2... positive"; Ling: "Most of the soma rose up, while
+# the left boundary fell"), the whole-cell average is smaller than the local peak by
+# intra-cell cancellation alone -- it is NOT a different or more-conservative
+# measurement of a different phenomenon, and the local 1-3 nm range some other citations
+# quote is NOT from giant/squid axons (a prior version of this comment misattributed it).
+# This chain's Delta r must be the WHOLE-CELL figure (0.2-0.4 nm): the coherent-strain
+# step downstream (mechanics.transduction, s = population/inter-cell synchrony) discounts
+# only cell-to-cell phase coherence, so the input radius change must already have any
+# within-cell (soma-vs-neurite, sign-heterogeneous) cancellation folded in, or that
+# cancellation would never be applied at all. The prior 2 nm value was a local-peak-scale
+# figure used at the whole-cell chain position -- the actual error this revision fixes.
+CITED_DISPLACEMENT_MIN_M: float = 0.2e-9  # whole-cell mammalian lower edge (ACS Nano 2018)
+CITED_DISPLACEMENT_MAX_M: float = 0.4e-9  # whole-cell mammalian upper edge (PNAS 2020, QPI)
+_CITED_DISPLACEMENT_M: float = 0.4e-9     # metres (~0.4 nm), content band, mammalian, whole-cell
 
 _CITED_PROVENANCE = Provenance(
-    source="Yang et al. 2018 (ACS Nano) & Ling et al. 2020 (PNAS / Light: Sci. Appl.) "
-    "- optical action-potential membrane displacement; sub-nm in mammalian neurons",
+    source="Yang et al. 2018 (ACS Nano) & Ling et al. 2020 (PNAS) - optical "
+    "action-potential membrane displacement, WHOLE-CELL spatially-averaged magnitude "
+    "(mammalian neurons)",
     assumptions=(
         "single-neuron AP membrane displacement is ~0.2-0.4 nm in mammalian cells "
-        "(0.5-5 nm only in giant/squid axons; 2 nm was the optimistic prior value)",
+        "when averaged WITH SIGN over the whole cell footprint; the same papers report "
+        "larger LOCAL peaks at individual points (Ling: soma +1.4/-1.8 nm) that are the "
+        "identical motion before intra-cell (soma-vs-neurite, opposite-sign) "
+        "cancellation -- using the local-peak figure here would double-count what the "
+        "downstream synchrony factor s (inter-cell coherence) already discounts",
         "the measured optical displacement is content-band (fast), not the slow "
         "rhythmic envelope",
         "the figure transfers from the measured preparation to speech-/motor-cortex "

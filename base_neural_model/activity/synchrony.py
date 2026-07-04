@@ -55,12 +55,27 @@ def mean_field_order_parameter(coupling: float, spread: float) -> float:
     return math.sqrt(1.0 - k_c / coupling)
 
 
+# Calibration of the two free surrogate parameters (drive_threshold, coupling_gain)
+# against the actual EIParams.central() ODE (integrate_ei -> run_activity.mean_synchrony),
+# least-squares fit over drive_e in [0.8, 2.0] at phase_spread_hz = 4.0 -- the exact range
+# and spread the Sobol with_activity factor space (model/sensitivity.py) sweeps. This
+# replaces two previously-picked constants with values regressed against the model's own
+# dynamical ground truth: RMS residual 0.055, max residual 0.17 (at the sharp limit-cycle
+# onset near drive_e ~ 1.36-1.4, which any smooth pitchfork surrogate underfits locally).
+# Recalibrate by re-running the fit in this docstring's script if EIParams.central() or the
+# Sobol sweep's drive_e bounds change. The with_activity Sobol collapse's robustness to
+# this surrogate's own documented max residual (0.17) is checked in
+# tests/test_sobol_collapse.py::test_activity_collapse_is_robust_to_surrogate_worst_case_error.
+_CALIBRATED_DRIVE_THRESHOLD: float = 1.281
+_CALIBRATED_COUPLING_GAIN: float = 108.5
+
+
 def synchrony_from_drive(
     drive: float,
     *,
     phase_spread_hz: float,
-    drive_threshold: float = 1.0,
-    coupling_gain: float = 16.0,
+    drive_threshold: float = _CALIBRATED_DRIVE_THRESHOLD,
+    coupling_gain: float = _CALIBRATED_COUPLING_GAIN,
 ) -> float:
     """Fast analytic synchrony from the E/I drive (a surrogate for the full ODE run).
 
@@ -72,8 +87,17 @@ def synchrony_from_drive(
     toward 1. The coupling is ``coupling_gain * max(0, drive - drive_threshold)``,
     fed through the same mean-field order parameter as the dynamical path.
 
+    The defaults are NOT picked constants: they are least-squares fit against the actual
+    ``EIParams.central()`` ODE trajectory (via ``run_activity().mean_synchrony``) over the
+    ``drive_e`` range the Sobol ``with_activity`` factor space sweeps -- ``drive_threshold
+    = 1.281`` locates the ODE's own limit-cycle bifurcation (measured onset ~1.36-1.4, the
+    surrogate's smooth pitchfork form places its threshold slightly below the sharp true
+    onset to best-fit the whole curve), and ``coupling_gain = 108.5`` matches the rise in
+    synchrony above it (RMS residual 0.055, max residual 0.17 at the bifurcation itself).
+
     It is a surrogate, not the ODE result: it preserves monotonicity and the
-    sub-/supra-threshold transition, which is what the variance decomposition needs.
+    sub-/supra-threshold transition, which is what the variance decomposition needs, and
+    is now anchored to the model it approximates rather than an arbitrary choice.
     """
     if drive < 0.0:
         raise ValueError(f"drive must be >= 0, got {drive!r}")

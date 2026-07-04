@@ -55,6 +55,14 @@ def test_viscoelastic_params_validate():
         ViscoelasticParams(exponent=1.5)
 
 
+def test_motor_preset_viscoelastic_factor_matches_live_computation():
+    """The motor preset's hand-set viscoelastic_factor must match viscoelastic_factor()
+    at the preset's own content_freq_hz, so the two cannot silently drift apart."""
+    m = MechanicsParams.motor_cortex()
+    live = viscoelastic_factor(m.content_freq_hz, ViscoelasticParams())
+    assert m.viscoelastic_factor == pytest.approx(live, abs=1e-4)
+
+
 # --- S1/S3/S6/S7: the coherent-term attenuation factors in the chain ----------------
 
 

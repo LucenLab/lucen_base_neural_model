@@ -109,6 +109,29 @@ def deviatoric_eshelby_response(nu: float) -> float:
     confines the volume change. The directional and volumetric channels therefore
     respond to the matrix state differently, which is part of why the directional term
     is a genuinely new, non-redundant signal.
+
+    **Dilute (single-inclusion) limit, and why interaction is bounded here too.** Like
+    ``kappa`` (:func:`base_neural_model.mechanics.eshelby.eshelby_kappa`) this is the
+    single-inclusion value; inclusion-inclusion interaction is neglected. It carries the
+    SAME Mori-Tanaka interaction bound as the volume trace
+    (:func:`base_neural_model.mechanics.eshelby.mori_tanaka_kappa_clamped`) --
+    ``<= |20 log10(1 - f)|`` -- but **suppressed by the orientation order ``Q``**: the net
+    deviatoric back-field one inclusion feels from its neighbours is the population average
+    of their deviatoric eigenstrains, ``beta eps_vol <u u - I/3> = beta eps_vol (2/3) Q``,
+    the SAME nematic order tensor :func:`axial_orientation_factor` uses. So the deviatoric
+    interaction scales with ``f Q`` (only the coherently aligned fraction sources a net
+    back-field; the random fraction cancels, exactly as the dilute directional term does at
+    ``Q = 0``), never exceeding the ``f`` volume bound, and reaching it only in the
+    unphysical ``Q = 1`` limit. Because the directional term is itself a fraction of the
+    total axial signal, the total-axial verdict impact is ``<= ~0.4 dB`` at the motor
+    operating point (``f ~ 0.15``, ``Q_eff`` up to ~0.9). **Positional correlation** (aligned
+    cells clustered in columnar files, which the mean-field average ignores) does NOT break
+    this: the Eshelby exterior strain falls as ``(a/r)^3`` and the cell spacing at
+    ``f = 0.15`` is ``~3.03`` radii ``= (4 pi / 3 f)^(1/3)``, capping per-neighbour coupling
+    at ``~3.5%``; even a perfectly-aligned axial column of cells sums to a local back-field
+    below the mean-field ``f Q`` estimate, so mean-field envelopes the correlated case.
+    A denser cortex (``f >~ 0.4``, spacing ``< ~2`` radii) is where correlation would begin to
+    matter and FEM would be needed - the model does not operate there.
     """
     s1111, s1122 = eshelby_sphere_components(nu)
     return s1111 - s1122
@@ -161,4 +184,11 @@ def orientation_provenance(
         f"{deviatoric_eshelby_response(nu):.4g} at nu = {nu} (weakly nu-dependent: "
         "~0.53 at nu=0, 0.4 at incompressibility - the directional channel is NOT "
         "suppressed by the incompressible fast-band matrix, unlike the volume trace)",
+        "dilute (single-inclusion) deviatoric response; inclusion-inclusion interaction "
+        "carries the same Mori-Tanaka bound as kappa but suppressed by orientation order "
+        "Q (deviatoric back-field ~ f*Q, only the aligned fraction contributes), <= ~0.4 dB "
+        "total-axial impact at the motor operating point (f~0.15, Q_eff up to ~0.9); "
+        "positional (columnar-file) correlation is enveloped by the mean-field estimate "
+        "because the (a/r)^3 exterior falloff at ~3-radii spacing caps per-neighbour "
+        "coupling at ~3.5% -- see deviatoric_eshelby_response docstring",
     )
