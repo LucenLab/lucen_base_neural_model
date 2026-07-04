@@ -15,6 +15,25 @@ cell elongated along the cortical column), so the per-cell eigenstrain carries a
   expansion (pure monopole, the current model), 1 = a fully directional expansion
   along ``u``.
 
+**The sign of the deviatoric axial term depends on which cell geometry sources it,
+and the two candidate geometries have OPPOSITE sign along a radial (transcranial)
+beam.** The motor preset's ``beta`` (positive) models an ELONGATED SOMA that expands
+preferentially along the column axis ``u`` (axial eigenstrain > radial), so its
+deviatoric axial part ADDS to the monopole when ``mu -> 1``. But the classical
+fast-deformation data (Tasaki/Iwasa) is a FIBRE swelling RADIALLY at ~fixed length --
+eigenstrain ``(eps, eps, 0)`` in the fibre frame, ``u`` = the fibre length axis. Its
+deviatoric axial component per unit trace is ``-1/3`` (vs a soma's ``+1/6`` for a 2:1
+along-axis elongation): a radially-swelling fibre interrogated ALONG its length
+contributes a NEGATIVE deviatoric axial strain -- it SUBTRACTS from the monopole. Since
+aligned axonal/dendritic neuropil is where the fast Delta r is actually measured and a
+transcranial beam is aligned with the columnar (fibre) axis, the fibre geometry is the
+physically relevant one for the fast band, and it makes the direct signal SMALLER, not
+larger. The preset uses the soma-positive convention; a reviewer modelling the fibre
+channel should set ``anisotropy`` with the negative-signed effective value (via a
+negative ``mean_axis_projection`` contribution or an explicitly reduced/negated beta).
+Either way the total-axial swing is a few dB about the ~-60 dB verdict -- it does not
+resurrect the direct signal.
+
 Temporal synchrony ``s`` (do cells fire at the *same time*) and **directional
 coherence** (do their axes ``u`` *point the same way*) are independent. The beam reads
 the **axial** (``z``, the beam direction) component of the population-averaged strain.

@@ -137,6 +137,14 @@ class MechanicsParams:
     anisotropy: float = 0.0              # beta: per-cell deviatoric fraction, [0, 1]
     orientation_coherence: float = 0.0   # Q: orientation order parameter, [0, 1]
     mean_axis_projection: float = 1.0    # mu = (director . beam axis), [-1, 1]
+    # Net-realization fraction of the DEVIATORIC (directional) axial term. It is 1.0 by
+    # default, deliberately DECOUPLED from dilatation_eta: eta is the poroelastic drainage
+    # fraction of a VOLUME change (how much survives ECS-reservoir redistribution), but
+    # the deviatoric part is a constant-volume SHAPE change that needs no net volume, so
+    # the drainage discount does not apply to it. Previously the directional term wrongly
+    # carried the volumetric eta -- a category error that under-counted the shape channel.
+    # A reviewer who wants the old coupled behaviour can set this equal to dilatation_eta.
+    deviatoric_eta: float = 1.0
     # nu for the deviatoric Eshelby response ONLY (orientation.py); see the note on
     # confinement_kappa above for why this legitimately differs from kappa's nu.
     matrix_poisson_ratio: float = 0.2
@@ -186,7 +194,11 @@ class MechanicsParams:
         ``cell_radius_m`` reflects the large layer-5 somata.
         """
         return cls(
-            membrane_disp_m=1.5e-9,
+            # The cited whole-cell mammalian Delta r (neuron_constants.py). run.py re-pins
+            # this from the cited constant at runtime (Invariant 2); carrying the SAME
+            # value in the preset keeps a direct mechanical_displacement(preset) call from
+            # tripping the d_single == membrane_disp_m guard. Was 1.5e-9 (old local-peak).
+            membrane_disp_m=0.4e-9,
             cell_radius_m=20e-6,        # large layer-5 / Betz somata (vs ~8 um generic)
             cell_volume_fraction=0.15,
             confinement_kappa=0.5,
@@ -194,6 +206,11 @@ class MechanicsParams:
             jitter_sigma_s=1.0e-3,
             content_freq_hz=20.0,       # beta-band content corner
             anisotropy=0.6,             # elongated, columnar cells -> deviatoric strain
+            # Deviatoric-channel net-realization fraction: 1.0, NOT dilatation_eta. The
+            # directional term is a constant-volume SHAPE change, so the poroelastic
+            # drainage fraction eta (which gates a VOLUME change competing with the ECS
+            # water reservoir) does not apply to it -- see MechanicsParams.deviatoric_eta.
+            deviatoric_eta=1.0,
             mean_axis_projection=1.0,   # beam ~ along the cortical column
             matrix_poisson_ratio=0.2,
             # Honest source-physics factors (flipped on for the demo preset; contestable

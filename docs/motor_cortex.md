@@ -94,6 +94,20 @@ abstracted. Pinned by [`test_motor_dynamics.py`](../tests/test_motor_dynamics.py
   the larger cell radius (`3Δr/r` shrinks with `r`). This is a real consequence of the
   Betz-cell size assumption, not the directional channel — and it is exactly the kind
   of parameter trade-off the model is built to make visible rather than hide.
+- The `cell_radius_m ≈ 20 µm` in `MechanicsParams.motor_cortex()` sits **below** the
+  true giant-Betz stereological size: modern morphometry puts the Betz soma at a
+  mean cell-body volume of ~86,700 µm³ (equivalent-sphere radius ~27 µm), with long
+  axes of 60–120 µm (Betz's own 60×120 µm², Brodmann's 53×106 µm²). The preset's 20 µm
+  is best read as a *large layer-5 pyramidal output cell* (ordinary L5 somata are
+  ~10–12 µm radius; true Betz cells are rarer — only ~10% of layer-Vb pyramids, ~125k
+  per hemisphere), not the giant Betz extreme. This is conservative for the headline:
+  because coherent displacement scales as `3Δr/r`, raising `r` toward the true-Betz
+  ~27 µm would *shrink* the direct beta term further under the floor, and the ~15%
+  volume fraction only requires proportionally fewer cells (changing the incoherent
+  √(1/N) pedestal, not the verdict, which collapses onto η and s). The shared
+  `cell_volume_fraction ≈ 0.15` itself is well-supported: cortical cell-body volume
+  fraction is ~10–40% of gray matter (neuronal soma somewhat below the all-cell figure,
+  which includes glia).
 - `β`, `Q_struct`, and the beam/column alignment `μ` are literature-motivated but
   **unmeasured** at the content band — like η, they are contestable inputs the model
   lets you sweep, not settled values.

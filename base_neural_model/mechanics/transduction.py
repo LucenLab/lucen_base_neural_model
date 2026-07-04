@@ -179,6 +179,10 @@ def mechanical_displacement(
         raise ValueError(
             f"saturation_strain must be positive or None, got {params.saturation_strain!r}"
         )
+    if not 0.0 <= params.deviatoric_eta <= 1.0:
+        raise ValueError(
+            f"deviatoric_eta must lie in [0, 1], got {params.deviatoric_eta!r}"
+        )
 
     n = geom.neuron_count
     s = synchrony_fraction
@@ -212,7 +216,10 @@ def mechanical_displacement(
     # Directional (deviatoric / orientation) axial term. It uses the deviatoric
     # Eshelby response in place of kappa and the population orientation factor; it is
     # zero when beta = 0 or the orientation is random (Q = 0), recovering the
-    # isotropic model exactly. Carries the same eta and gate length as the monopole.
+    # isotropic model exactly. It carries the same gate length as the monopole, but its
+    # OWN net-realization fraction ``deviatoric_eta`` (default 1.0), NOT the volumetric
+    # ``dilatation_eta``: the deviatoric part is a constant-volume shape change, so the
+    # poroelastic drainage discount that gates the VOLUME term does not apply to it.
     eps_dir = directional_axial_strain(
         eps_coh,
         anisotropy=params.anisotropy,
@@ -220,7 +227,7 @@ def mechanical_displacement(
         director_projection=params.mean_axis_projection,
         nu=params.matrix_poisson_ratio,
     )
-    axial_dir = params.dilatation_eta * gate_len_m * eps_dir
+    axial_dir = params.deviatoric_eta * gate_len_m * eps_dir
 
     # The beam reads the magnitude of the total axial coherent displacement.
     axial_total = abs(axial_iso + axial_dir)
@@ -251,8 +258,10 @@ def mechanical_displacement(
         f"{params.correlation_coherent_fraction}; S1/S3/S6), saturation "
         f"{params.saturation_strain} (S7): coherent strain {eps_coh_raw:.4g} -> "
         f"{eps_coh:.4g}",
-        f"axial decomposition: isotropic {axial_iso:.4g} m + directional "
-        f"{axial_dir:.4g} m (Q = {params.orientation_coherence})",
+        f"axial decomposition: isotropic {axial_iso:.4g} m (volumetric, eta = "
+        f"{params.dilatation_eta}) + directional {axial_dir:.4g} m (deviatoric shape "
+        f"change, deviatoric_eta = {params.deviatoric_eta}, NOT gated by the poroelastic "
+        f"drainage eta; Q = {params.orientation_coherence})",
     )
     return MechanicalDisplacement(
         axial_displacement_m=axial_total,

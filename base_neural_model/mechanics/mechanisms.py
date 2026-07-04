@@ -29,6 +29,21 @@ exists to make explicit: the direct beta signal is orders below detectability, w
 envelope is large -- but detecting the envelope is detecting cerebral blood volume, i.e.
 ordinary fUS, not the specific fast neuromechanical readout.
 
+**A consistency caveat on the direct term's own eta.** This module discounts the OSMOTIC
+mechanism with ``eta_osmotic ~ 0.05`` because activity-driven cell swelling draws water
+from the ECS reservoir at ~conserved bulk volume -- a compartment-conservation argument.
+The SAME argument applies to the fast neuromechanical term: an AP-locked membrane
+expansion is also fed largely by water crossing the membrane from the ECS, so its NET
+tissue dilatation should carry a similarly small eta. Yet the direct chain
+(``transduction.py``) runs at ``dilatation_eta = 0.5`` -- ~10x more generous than the
+osmotic term, with no compartment discount. This is deliberately left as the poroelastic
+sweep's job (``poroelastic.py`` sweeps eta across ~0.01..1 and the verdict collapses onto
+it), but it means the ~-60 dB direct-term verdict is, if anything, OPTIMISTIC: a
+compartment-consistent fast eta (~0.05-0.1) would push the direct beta signal a further
+~10-20 dB down. The vascular term legitimately keeps ``eta ~ 1`` because blood adds
+volume from OUTSIDE the closed ECS/cell system -- which is exactly why it, and not the
+neuromechanical term, is the robust net-volume signal.
+
 **Detection of each band (proper modeling).** In the phase-sensitive *displacement*
 readout the model uses, the SVD clutter high-pass (D2) that removes cardiac/respiratory
 bulk motion sits at ~1 Hz: the beta carrier (20-30 Hz) survives it, while the slow
