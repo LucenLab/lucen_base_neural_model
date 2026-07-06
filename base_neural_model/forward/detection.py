@@ -197,6 +197,55 @@ class AcquisitionParams:
         )
 
     @classmethod
+    def demo_motor_engineering(cls) -> AcquisitionParams:
+        """The **optimistic engineering-gap** acoustic regime -- every floor lever at its
+        favourable-but-*physically-achievable* value, so the budget lands in the spec's
+        claimed "one to two orders" gap rather than the honest ~3 orders.
+
+        The counterpart to :meth:`demo_motor` (honest) and distinct from
+        :meth:`demo_motor_optimistic` (the old all-inert baseline, which assumes an *unsafe*
+        30 dB echo SNR and full 6000-frame integration). Three floor terms move relative to
+        ``demo_motor``, each defensible and none physically impossible:
+
+        * **Echo SNR capped at the transcranial safety ceiling, not raised.** 28 dB, i.e.
+          ``max_per_element_echo_snr_db(12)`` (40 dB MI-limited surface figure minus the
+          12 dB one-way transmit skull loss; see :mod:`base_neural_model.forward.safety`).
+          This is *lower* than ``demo_motor``'s 30 dB -- respecting the MI/thermal limit is
+          the point, so ``echo_snr_within_safety`` is True here where it is False for
+          ``demo_motor``. Hardcoded (``10**2.8``) to avoid a circular import with
+          ``safety.py``; the invariant is pinned by ``test_detection``.
+        * **Aperture correction (D4): 0.6 -> 0.9.** The metamaterial aberration-correcting
+          stack -- the architecture's headline feature, excluded from the honest baseline --
+          restores most of the coherent aperture through the skull.
+        * **Thermal-independent frames (D1): the 2 ms decorrelation cap is removed.** An
+          echo-SNR/thermal-limited floor has independent per-frame noise, so ``N_ens`` is
+          the frames in the coherent window (800), capped only by the biology below.
+
+        Deliberately unchanged from ``demo_motor``: the **200 ms beta-burst coherence
+        window** (``coherence_time_s=0.2`` -- biology, not an engineering lever, so the gap
+        is reached without touching neural physics), the echo correlation, the residual
+        aberration, the clutter high-pass, and the reverberation.
+        """
+        return cls(
+            center_freq_hz=2e6,
+            frame_rate_hz=4000.0,
+            epoch_s=1.5,
+            echo_snr_linear=10**2.8,     # 28 dB: the transcranial safety ceiling at 12 dB
+                                         # skull (safety.max_per_element_echo_snr_db(12)),
+                                         # NOT the honest preset's unsafe 30 dB
+            skull_loss_db_oneway=12.0,
+            n_elements=256,
+            coherence_time_s=0.2,        # beta burst KEPT (biology, not an engineering lever)
+            # frame_decorrelation_time_s left at None: frames are thermal-independent, so
+            # N_ens is the burst-window frame count (800), not the 2 ms-decorrelation 100
+            echo_correlation=0.95,
+            aberration_phase_rad=1.0e-4,
+            aperture_coherence=0.9,      # metamaterial aberration correction (the architecture's point)
+            clutter_highpass_hz=1.0,
+            reverberation_ratio=0.5,
+        )
+
+    @classmethod
     def speech_unit(cls) -> AcquisitionParams:
         """The speech-unit regime: same hardware, a tens-of-ms coherence window.
 

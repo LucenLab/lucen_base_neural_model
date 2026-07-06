@@ -28,6 +28,7 @@ from base_neural_model.model.run import (
     NeuralModelReport,
     run_motor_cortex,
     run_motor_demo,
+    run_motor_demo_optimistic,
     run_motor_trial,
     run_neural_model,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "run_motor_cortex",
     "run_motor_trial",
     "run_motor_demo",
+    "run_motor_demo_optimistic",
     "NeuralModelReport",
     # the three kill gates
     "passes_stage1_gate",

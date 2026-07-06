@@ -90,6 +90,32 @@ def test_effective_sample_count_capped_by_coherence_and_decorrelation():
     assert slower.ensemble_count == 50
 
 
+def test_demo_motor_engineering_is_physically_bounded():
+    """The optimistic engineering-gap acquisition: floor improved, nothing physically illegal.
+
+    Removing the 2 ms decorrelation cap makes the frames thermal-independent, so N_ens is
+    the burst-window frame count (800), not the honest 100; the aperture correction lifts
+    n_eff to round(0.9*256)=230. Critically the echo SNR is *within* the transcranial safety
+    ceiling (28 dB), where the honest demo (30 dB) exceeds it -- the 'nothing physically
+    impossible' guarantee, machine-checked.
+    """
+    from base_neural_model.forward.safety import echo_snr_within_safety
+
+    eng = AcquisitionParams.demo_motor_engineering()
+    hon = AcquisitionParams.demo_motor()
+    # N_ens: thermal-independent frames, capped only by the 200 ms beta burst (4000*0.2).
+    assert eng.coherent_window_s == pytest.approx(0.2)      # beta-burst window KEPT
+    assert eng.ensemble_count == 800
+    assert eng.integration_gain == pytest.approx(math.sqrt(800.0))
+    # Aperture correction 0.6 -> 0.9.
+    assert eng.effective_n_elements == 230
+    # The floor is materially lower than the honest preset's.
+    assert phase_displacement_floor(eng) < phase_displacement_floor(hon)
+    # Physical-possibility guardrail: within safety here, exceeds it for the honest demo.
+    assert echo_snr_within_safety(eng) is True
+    assert echo_snr_within_safety(hon) is False
+
+
 def test_coherence_window_bounded_by_clutter_highpass():
     """D2: a higher clutter high-pass shortens the coherent window (1/cutoff memory)."""
     hon = AcquisitionParams.demo_motor()

@@ -1,28 +1,20 @@
-"""The neural-model summary: what one simulation did, end to end.
+"""The M1 headline: neural activity -> NeuralState -> predicted nanometre displacement.
 
-A single figure that follows one ``run_neural_model`` from neural activity to a
-predicted nanometre voxel displacement, so the activity -> mechanics translation is
-auditable at a glance. Four panels:
+One consolidated view of a steady motor-cortex run, following the pipeline end to end:
 
-1. **Activity** - the E/I limit cycle and the synchrony r(t) it produces.
-2. **The bridge** - the reduced NeuralState (s, f_c, sigma_t, coherent-neuron count)
-   and the arrow to the predicted displacement, with the number on it. This is the
-   panel that links the two layers.
-3. **Jitter survival** - ``exp(-2 pi^2 f^2 sigma^2)`` across frequency, with this
-   run's content corner ``f_c`` marked and the surviving fraction read off. The
-   direct bridge between the neural dynamics and the jitter low-pass.
-4. **Displacement decomposition** - the predicted Delta z broken into its parts
-   (isotropic vs directional; coherent vs the incoherent pedestal; before vs after
-   the jitter low-pass), all in nm.
+1. **Activity** -- the E/I beta limit cycle and the synchrony r(t) it settles at.
+2. **The bridge** -- the reduced NeuralState (s, f_c, sigma_t, Q, rate) as a readable
+   card, and the jitter low-pass exp(-2 pi^2 f^2 sigma^2) with this run's content corner
+   marked, so the surviving fraction is read off the curve.
+3. **Decomposition** -- the predicted axial Delta z split into its isotropic (monopole)
+   and directional (deviatoric Betz) shares, with the incoherent pedestal for scale.
 
-Every number is read back from the live ``NeuralModelReport`` - the figure cannot
-drift from the model, and it reports the ACTUAL computed values, not targets.
+Uses run_motor_cortex() (steady resting beta) so the rhythm is clean; the honest Gate-A
+verdict with its bursty in-burst scoring lives in plot_budget / plot_transduction_chain.
 
 Run::
 
-    uv sync --group viz
-    uv run python scripts/plot_neural_summary.py          # -> plots/neural_summary.png
-    uv run python scripts/plot_neural_summary.py --motor  # the M1 preset
+    uv run python scripts/plot_neural_summary.py            # writes neural_summary.png
     uv run python scripts/plot_neural_summary.py --show
 """
 
@@ -31,190 +23,151 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import _style as S
 import numpy as np
 
-from base_neural_model.base.units import m_to_nm
-from base_neural_model.model.run import (
-    DEFAULT_VOXEL,
-    run_motor_cortex,
-    run_neural_model,
-)
+from base_neural_model.model import run_motor_cortex
 
 
-def _survival(freq_hz: np.ndarray, sigma_t_s: float) -> np.ndarray:
-    """The jitter low-pass exp(-2 pi^2 f^2 sigma_t^2) across frequency."""
-    return np.exp(-2.0 * np.pi**2 * freq_hz**2 * sigma_t_s**2)
-
-
-def build_figure(*, motor: bool, low_beta: bool = False):
+def build_figure():
     import matplotlib.pyplot as plt
 
-    if motor:
-        report = run_motor_cortex(low_beta=low_beta)
-        from base_neural_model.base.types import VoxelGeometry
-
-        voxel = VoxelGeometry.motor_cortex_layer5()
-        band = "low-beta" if low_beta else "high-beta"
-        title_region = f"Motor cortex (M1, {band})"
-    else:
-        report = run_neural_model()
-        voxel = DEFAULT_VOXEL
-        title_region = "Generic cortex"
-
-    state = report.neural_state
+    S.apply_style()
+    report = run_motor_cortex()
+    a = report.activity
+    ns = report.neural_state
     md = report.mechanical_displacement
-    act = report.activity
 
-    s = state.synchrony_fraction
-    f_c = state.content_freq_hz
-    sigma_t = state.jitter_sigma_s
-    survival = md.content_band_survival
-
-    # The three requested data points -------------------------------------------
-    coherent_neurons = int(round(s * voxel.neuron_count))   # illustrative count
-    dz_total_nm = m_to_nm(md.value_m)
-    dz_surviving_nm = m_to_nm(md.value_m * survival)
-    survival_pct = 100.0 * survival
-
-    fig = plt.figure(figsize=(15, 8.6), constrained_layout=True)
-    fig.suptitle(
-        f"Neural-model summary - {title_region}:  "
-        f"activity  ->  NeuralState  ->  predicted dz = {dz_surviving_nm:.2f} nm",
-        fontsize=14, fontweight="bold",
+    fig = plt.figure(figsize=(14, 7.6))
+    gs = fig.add_gridspec(
+        2, 3, left=0.055, right=0.985, top=0.82, bottom=0.09,
+        height_ratios=[1.0, 1.0], width_ratios=[1.25, 1.0, 1.0],
+        hspace=0.42, wspace=0.30,
     )
-    (ax_act, ax_bridge), (ax_surv, ax_decomp) = fig.subplots(2, 2)
+    ax_rhythm = fig.add_subplot(gs[0, 0])
+    ax_sync = fig.add_subplot(gs[1, 0], sharex=ax_rhythm)
+    ax_card = fig.add_subplot(gs[0, 1])
+    ax_surv = fig.add_subplot(gs[1, 1])
+    ax_dz = fig.add_subplot(gs[:, 2])
 
-    # --- Panel 1: the activity that produced the state -------------------------
-    t_ms = act.t_s * 1e3
-    ax_act.plot(t_ms, act.e, lw=1.2, color="#c0392b", label="E")
-    ax_act.plot(t_ms, act.i, lw=1.2, color="#2c7fb8", label="I")
-    ax_act.plot(t_ms, act.r, lw=1.6, color="#16a085", label="synchrony r(t)")
-    ax_act.axhline(s, color="#e67e22", ls="--", lw=1.1, label=f"mean s = {s:.2f}")
-    ax_act.set_xlim(0, min(250, t_ms[-1]))
-    ax_act.set_ylim(0, 1.02)
-    ax_act.set_xlabel("time (ms)")
-    ax_act.set_ylabel("activation / synchrony")
-    ax_act.set_title(f"1. Activity: E/I limit cycle at f_c = {f_c:.0f} Hz")
-    ax_act.legend(loc="upper right", fontsize=8, ncol=2)
-    ax_act.grid(alpha=0.3)
+    S.suptitle(
+        fig,
+        "Neural model summary  |  motor cortex (M1)",
+        "activity  ->  NeuralState  ->  predicted axial displacement.  "
+        f"Steady resting beta at {ns.content_freq_hz:.0f} Hz.",
+    )
 
-    # --- Panel 2: the bridge (NeuralState -> predicted dz) ----------------------
-    ax_bridge.axis("off")
-    lines_state = [
-        ("synchrony  s", f"{s:.2f}"),
-        ("content corner  f_c", f"{f_c:.0f} Hz"),
-        ("jitter  sigma_t", f"{sigma_t * 1e3:.2f} ms"),
-        ("mean firing rate", f"{state.mean_firing_rate_hz:.1f} Hz"),
-        (
-            "orientation coherence  Q",
-            "-" if state.orientation_coherence is None
-            else f"{state.orientation_coherence:.2f}",
-        ),
-        (f"coherent neurons  (s x N={voxel.neuron_count:,})", f"~{coherent_neurons:,}"),
+    # --- 1a. The E/I beta rhythm (show a 0.6 s window so the cycles are legible) -----
+    t = a.t_s
+    win = (t >= 0.4) & (t <= 1.0)
+    ax_rhythm.plot(t[win], a.e[win], color=S.DIRECT, lw=1.6, label="E (excitatory)")
+    ax_rhythm.plot(t[win], a.i[win], color=S.OSMOTIC, lw=1.4, label="I (inhibitory)")
+    ax_rhythm.set_ylabel("population activity")
+    ax_rhythm.set_title("1. The E/I beta limit cycle")
+    ax_rhythm.legend(loc="upper right", ncol=2)
+    ax_rhythm.tick_params(labelbottom=False)
+    S.tidy(ax_rhythm, xgrid=False)
+
+    # --- 1b. Synchrony r(t), the Kuramoto order parameter --------------------------
+    ax_sync.plot(t[win], a.r[win], color=S.VIOLET, lw=1.8)
+    ax_sync.axhline(ns.synchrony_fraction, color=S.INK_2, lw=1.0, ls="--")
+    ax_sync.text(t[win][-1], ns.synchrony_fraction, f" s = {ns.synchrony_fraction:.2f}",
+                 va="center", ha="left", fontsize=8.5, color=S.INK_2, fontweight="bold")
+    ax_sync.set_ylim(0, 1.05)
+    ax_sync.set_xlabel("time  (s)")
+    ax_sync.set_ylabel("synchrony  r(t)")
+    ax_sync.set_title("Population synchrony (Kuramoto r)")
+    S.tidy(ax_sync, xgrid=False)
+
+    # --- 2a. The NeuralState bridge card -------------------------------------------
+    ax_card.axis("off")
+    ax_card.set_title("2. The reduced NeuralState")
+    rows = [
+        ("synchrony  s", f"{ns.synchrony_fraction:.2f}", "temporal coherence"),
+        ("content corner  f_c", f"{ns.content_freq_hz:.0f} Hz", "beta rhythm"),
+        ("jitter  sigma_t", f"{ns.jitter_sigma_s * 1e3:.1f} ms", "firing-time spread"),
+        ("orientation  Q", f"{ns.orientation_coherence:.2f}", "columnar alignment"),
+        ("mean rate", f"{ns.mean_firing_rate_hz:.1f} Hz", "population firing"),
     ]
-    y = 0.96
-    ax_bridge.text(0.0, y, "NeuralState", fontsize=12, fontweight="bold",
-                   transform=ax_bridge.transAxes)
-    y -= 0.10
-    for label, val in lines_state:
-        ax_bridge.text(0.02, y, label, fontsize=10, transform=ax_bridge.transAxes)
-        ax_bridge.text(0.62, y, val, fontsize=10, fontweight="bold",
-                       transform=ax_bridge.transAxes)
-        y -= 0.085
+    y0 = 0.92
+    for i, (name, val, note) in enumerate(rows):
+        y = y0 - i * 0.185
+        ax_card.text(0.02, y, name, fontsize=9.5, color=S.INK_2, va="center")
+        ax_card.text(0.62, y, val, fontsize=12, color=S.INK, fontweight="bold",
+                     va="center", ha="left")
+        ax_card.text(0.62, y - 0.058, note, fontsize=7.3, color=S.MUTED,
+                     va="center", ha="left")
+        if i < len(rows):
+            ax_card.axhline(y - 0.093, xmin=0.02, xmax=0.98, color=S.GRID, lw=0.8)
 
-    # The arrow + the headline predicted displacement.
-    ax_bridge.annotate(
-        "", xy=(0.5, y - 0.02), xytext=(0.5, y + 0.05),
-        xycoords=ax_bridge.transAxes,
-        arrowprops=dict(arrowstyle="-|>", color="#1f3b73", lw=2.5),
-    )
-    y -= 0.10
-    ax_bridge.text(0.5, y, "transduction chain", fontsize=9, style="italic",
-                   ha="center", color="#1f3b73", transform=ax_bridge.transAxes)
-    y -= 0.11
-    ax_bridge.text(0.5, y, f"Predicted dz = {dz_surviving_nm:.2f} nm", fontsize=15,
-                   fontweight="bold", ha="center", color="#1f3b73",
-                   transform=ax_bridge.transAxes,
-                   bbox=dict(boxstyle="round", fc="#eaf0fb", ec="#1f3b73"))
-    y -= 0.09
-    ax_bridge.text(0.5, y, f"(coherent {dz_total_nm:.2f} nm x {survival_pct:.0f}% "
-                   "jitter survival)", fontsize=9, ha="center", color="0.3",
-                   transform=ax_bridge.transAxes)
-    ax_bridge.set_title("2. The activity -> mechanics bridge", fontsize=11)
+    # --- 2b. Jitter survival curve --------------------------------------------------
+    f = np.linspace(0, 60, 400)
+    survival = np.exp(-2.0 * np.pi**2 * f**2 * ns.jitter_sigma_s**2)
+    ax_surv.plot(f, survival, color=S.DIRECT, lw=2)
+    fc, sv = ns.content_freq_hz, md.content_band_survival
+    ax_surv.axvline(fc, color=S.INK_2, lw=1.0, ls="--")
+    ax_surv.plot([fc], [sv], "o", color=S.DIRECT, ms=8, zorder=5,
+                 markeredgecolor=S.SURFACE, markeredgewidth=1.5)
+    ax_surv.annotate(f"f_c = {fc:.0f} Hz\nsurvival {sv:.2f}",
+                     xy=(fc, sv), xytext=(fc + 9, sv - 0.22),
+                     fontsize=8.5, color=S.INK, fontweight="bold",
+                     arrowprops=dict(arrowstyle="->", color=S.INK_2))
+    ax_surv.set_xlim(0, 60)
+    ax_surv.set_ylim(0, 1.05)
+    ax_surv.set_xlabel("frequency  (Hz)")
+    ax_surv.set_ylabel("content-band survival")
+    ax_surv.set_title("Jitter low-pass  exp(-2π²f²σ²)")
+    S.tidy(ax_surv, xgrid=False)
 
-    # --- Panel 3: jitter survival vs frequency, anchored at f_c -----------------
-    freqs = np.linspace(0.0, 120.0, 600)
-    surv = _survival(freqs, sigma_t)
-    ax_surv.plot(freqs, surv * 100, lw=2.2, color="#8e44ad")
-    ax_surv.axvline(f_c, color="#16a085", ls="--", lw=1.4)
-    ax_surv.plot([f_c], [survival_pct], "o", color="#16a085", ms=9, zorder=5)
-    ax_surv.annotate(
-        f"f_c = {f_c:.0f} Hz\n{survival_pct:.0f}% survives",
-        xy=(f_c, survival_pct), xytext=(f_c + 12, min(survival_pct + 18, 90)),
-        fontsize=9, fontweight="bold", color="#16a085",
-        arrowprops=dict(arrowstyle="->", color="#16a085"),
-    )
-    ax_surv.fill_between(freqs, 0, surv * 100, where=freqs <= f_c,
-                         color="#d2b4de", alpha=0.4)
-    ax_surv.set_xlim(0, 120)
-    ax_surv.set_ylim(0, 102)
-    ax_surv.set_xlabel("frequency (Hz)")
-    ax_surv.set_ylabel("coherent displacement surviving (%)")
-    ax_surv.set_title(
-        f"3. Jitter low-pass exp(-2 pi^2 f^2 sigma^2),  sigma_t = {sigma_t*1e3:.1f} ms"
-    )
-    ax_surv.grid(alpha=0.3)
+    # --- 3. The Delta z decomposition (stacked) -------------------------------------
+    iso = md.isotropic_axial_m * 1e9
+    dirc = md.directional_axial_m * 1e9
+    ped = md.incoherent_pedestal_m * 1e9
+    total = md.axial_displacement_m * 1e9
 
-    # --- Panel 4: displacement decomposition (nm) ------------------------------
-    iso_nm = m_to_nm(md.isotropic_axial_m)
-    dir_nm = m_to_nm(md.directional_axial_m)
-    pedestal_nm = m_to_nm(md.incoherent_pedestal_m)
-    bars = [
-        ("isotropic\n(volume)", iso_nm, "#2c7fb8"),
-        ("directional\n(orientation)", dir_nm, "#27ae60"),
-        ("coherent\ntotal", dz_total_nm, "#1f3b73"),
-        ("after jitter\nlow-pass", dz_surviving_nm, "#8e44ad"),
-        ("incoherent\npedestal", pedestal_nm, "#c0392b"),
-    ]
-    labels = [b[0] for b in bars]
-    vals = [b[1] for b in bars]
-    colours = [b[2] for b in bars]
-    xpos = np.arange(len(bars))
-    ax_decomp.bar(xpos, vals, color=colours, alpha=0.85)
-    for x, v in zip(xpos, vals, strict=True):
-        ax_decomp.text(x, v, f"{v:.2f}", ha="center", va="bottom", fontsize=9,
-                       fontweight="bold")
-    ax_decomp.set_xticks(xpos)
-    ax_decomp.set_xticklabels(labels, fontsize=8.5)
-    ax_decomp.set_ylabel("displacement (nm)")
-    ax_decomp.set_title("4. Predicted dz, decomposed")
-    ax_decomp.grid(alpha=0.3, axis="y")
+    ax_dz.bar(0, iso, width=0.62, color=S.ISO, label="isotropic (monopole)", zorder=3)
+    ax_dz.bar(0, dirc, bottom=iso + 0.003, width=0.62, color=S.DIR,
+              label="directional (Betz)", zorder=3)
+    ax_dz.bar(1, ped, width=0.62, color=S.PEDESTAL, label="incoherent pedestal", zorder=3)
+    ax_dz.set_xticks([0, 1])
+    ax_dz.set_xticklabels(["coherent\nsignal", "noise\npedestal"], fontsize=9)
+    ax_dz.set_ylabel("axial displacement  (nm)")
+    ax_dz.set_title("3. Predicted Delta z decomposition")
+    ax_dz.legend(loc="upper right", fontsize=8)
 
+    # direct labels on the stack
+    ax_dz.text(0, iso / 2, f"{iso:.3f}", ha="center", va="center",
+               fontsize=8.5, color=S.SURFACE, fontweight="bold")
+    ax_dz.text(0, iso + dirc / 2, f"{dirc:.3f}", ha="center", va="center",
+               fontsize=8.5, color=S.SURFACE, fontweight="bold")
+    ax_dz.text(0, total + 0.012, f"total {total:.3f} nm", ha="center", va="bottom",
+               fontsize=9.5, color=S.INK, fontweight="bold")
+    ax_dz.text(1, ped + 0.012, f"{ped:.3f} nm", ha="center", va="bottom",
+               fontsize=8.5, color=S.INK_2)
+    ax_dz.set_ylim(0, total * 1.28)
+    S.tidy(ax_dz, xgrid=False)
+
+    S.footer(fig, "Recomputed live from run_motor_cortex() (steady resting beta). The "
+                  "directional term uses deviatoric_eta (shape change, undrained), not "
+                  "the volumetric dilatation eta.")
     return fig
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "-o", "--output", type=Path, default=Path("plots/neural_summary.png")
-    )
-    parser.add_argument("--motor", action="store_true",
-                        help="use the motor-cortex (M1) preset")
-    parser.add_argument("--low-beta", action="store_true",
-                        help="with --motor, use the low-beta M1 preset (~13-17 Hz)")
-    parser.add_argument("--show", action="store_true", help="also open a window")
+    parser.add_argument("-o", "--output", type=Path,
+                        default=Path("plots/neural_summary.png"))
+    parser.add_argument("--show", action="store_true")
     parser.add_argument("--dpi", type=int, default=150)
     args = parser.parse_args()
 
     import matplotlib
-
     if not args.show:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig = build_figure(motor=args.motor, low_beta=args.low_beta)
-    fig.savefig(args.output, dpi=args.dpi, bbox_inches="tight")
-    print(f"wrote {args.output.resolve()}")
+    fig = build_figure()
+    S.save(fig, args.output, dpi=args.dpi)
     if args.show:
         plt.show()
 

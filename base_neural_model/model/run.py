@@ -368,3 +368,51 @@ def run_motor_demo(
         mechanism_params=mechanism_params or MechanismParams(),
         drive_fn=drive,
     )
+
+
+def run_motor_demo_optimistic(
+    *,
+    residual_clutter_m: float = 0.0,
+    mechanism_params: MechanismParams | None = None,
+    burst_occupancy: float = 0.2,
+    burst_duration_s: float = 0.2,
+    synchrony_percentile: float = 90.0,
+    duration_s: float = 8.0,
+    fs_hz: float = 2000.0,
+) -> NeuralModelReport:
+    """Run the **optimistic engineering-gap Gate A** -- the physically-achievable-best
+    counterpart to :func:`run_motor_demo`.
+
+    Identical neural biology to :func:`run_motor_demo` (same ``EIParams.motor_cortex``,
+    bursty beta drive, in-burst p90 synchrony, and the cited 0.4 nm Delta r that
+    ``run_neural_model`` re-pins) -- only the *contestable engineering/parameter* levers
+    move, each to its favourable-but-physically-possible value:
+
+    * source: :meth:`~base_neural_model.base.types.MechanicsParams.motor_cortex_optimistic`
+      (r = 8 um, eta = 1) over the
+      :meth:`~base_neural_model.base.types.VoxelGeometry.motor_cortex_active_column`
+      (L = 1.5 mm active column);
+    * acoustics: :meth:`~base_neural_model.forward.detection.AcquisitionParams.
+      demo_motor_engineering` (echo SNR at the transcranial safety ceiling, aberration-
+      corrected aperture, thermal-independent integration, beta-burst window kept).
+
+    Nothing physically impossible: Delta r is locked, eta <= 1, kappa >= 1/3, and the echo
+    SNR is *within* the MI/thermal safety ceiling (``echo_snr_within_safety`` True, unlike
+    ``demo_motor``). The verdict lands at ~-25 dB (~1.25 orders under the through-skull
+    floor) -- the spec's "one to two orders" engineering gap -- versus ~-60 dB (~3 orders)
+    for the honest :func:`run_motor_demo`. This is the optimistic END of the same range; the
+    honest preset is the pessimistic end. No honest preset is modified.
+    """
+    drive = bursty_beta_drive(occupancy=burst_occupancy, burst_duration_s=burst_duration_s)
+    return run_neural_model(
+        EIParams.motor_cortex(),
+        geom=VoxelGeometry.motor_cortex_active_column(),
+        mechanics=MechanicsParams.motor_cortex_optimistic(),
+        duration_s=duration_s,
+        fs_hz=fs_hz,
+        acquisition=AcquisitionParams.demo_motor_engineering(),
+        residual_clutter_m=residual_clutter_m,
+        synchrony_percentile=synchrony_percentile,
+        mechanism_params=mechanism_params or MechanismParams(),
+        drive_fn=drive,
+    )

@@ -1,15 +1,13 @@
-"""Visualize the dynamical activity layer: E/I rhythm, synchrony r(t), band power.
+"""The dynamical layer: the M1 E/I neural-mass rhythm, its synchrony, and its spectrum.
 
-The neural-mass model produces the rhythm and the population synchrony that drive the
-mechanical signal. This figure reads them straight back from the live activity layer
-(:func:`base_neural_model.activity.run_activity`) so the plot cannot drift from the
-model: the E(t)/I(t) limit cycle, the instantaneous Kuramoto synchrony r(t), and the
-one-sided power spectrum of E(t) with the content/envelope split marked.
+The activity layer integrates a Wilson-Cowan excitatory/inhibitory mean field; for the
+motor preset it settles on a beta limit cycle. Panel 1 shows the E and I traces over a
+short window (so the cycles are legible) plus the Kuramoto synchrony r(t) it produces;
+panel 2 is the power spectrum of E(t), with the beta peak and content-band edge marked.
 
 Run::
 
-    uv sync --group viz
-    uv run python scripts/plot_activity.py              # writes activity.png
+    uv run python scripts/plot_activity.py            # writes activity.png
     uv run python scripts/plot_activity.py --show
 """
 
@@ -18,96 +16,85 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from base_neural_model.activity import run_activity
-from base_neural_model.activity.populations import EIParams
+import _style as S
 
-# The three cited rhythm presets, by band.
-_PRESETS = {
-    "gamma": (EIParams.central, "generic cortex, gamma"),
-    "high-beta": (EIParams.motor_cortex, "M1, high-beta"),
-    "low-beta": (EIParams.motor_cortex_low_beta, "M1, low-beta"),
-}
+from base_neural_model.model import run_motor_cortex
 
 
-def build_figure(*, preset: str = "gamma"):
+def build_figure():
     import matplotlib.pyplot as plt
 
-    ei_factory, label = _PRESETS[preset]
-    ei = ei_factory()
-    ts = run_activity(ei)
-    spec = ts.spectrum
-    # The envelope/content boundary is the rhythm's own lower edge (gamma splits at
-    # ~30 Hz, beta at ~13 Hz), so the plotted split follows the preset.
-    boundary_hz = ei.rhythm_band.f_lo_hz
+    S.apply_style()
+    report = run_motor_cortex()
+    a = report.activity
+    ns = report.neural_state
+    sp = a.spectrum
 
-    fig = plt.figure(figsize=(14, 4.6), constrained_layout=True)
-    fig.suptitle(
-        f"Dynamical activity layer ({label})   "
-        f"f_c = {spec.dominant_freq_hz:.1f} Hz   "
-        f"mean synchrony s = {ts.mean_synchrony:.2f}",
-        fontsize=13, fontweight="bold",
+    fig = plt.figure(figsize=(13.5, 5.6))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.5, 1.0], left=0.06, right=0.98,
+                          top=0.80, bottom=0.14, wspace=0.24)
+    ax0 = fig.add_subplot(gs[0, 0])
+    ax1 = fig.add_subplot(gs[0, 1])
+
+    S.suptitle(
+        fig,
+        "Activity layer  |  motor cortex (M1)",
+        f"Wilson-Cowan E/I mean field on a beta limit cycle "
+        f"({ns.content_freq_hz:.0f} Hz), synchrony s = {ns.synchrony_fraction:.2f}.",
     )
-    ax0, ax1, ax2 = fig.subplots(1, 3)
 
-    # --- Panel 1: the E/I limit cycle ------------------------------------------
-    ax0.plot(ts.t_s * 1e3, ts.e, lw=1.4, color="#c0392b", label="E (excitatory)")
-    ax0.plot(ts.t_s * 1e3, ts.i, lw=1.4, color="#2c7fb8", label="I (inhibitory)")
-    ax0.set_xlim(0, min(200, ts.t_s[-1] * 1e3))
-    ax0.set_xlabel("time (ms)")
-    ax0.set_ylabel("population activation")
-    ax0.set_title("1. E/I neural-mass limit cycle")
-    ax0.legend(loc="upper right", fontsize=8)
-    ax0.grid(alpha=0.3)
+    # --- Panel 1: E/I traces + synchrony over a 0.6 s window ------------------------
+    t = a.t_s
+    win = (t >= 0.4) & (t <= 1.0)
+    ax0.plot(t[win], a.e[win], color=S.DIRECT, lw=1.7, label="E (excitatory)")
+    ax0.plot(t[win], a.i[win], color=S.OSMOTIC, lw=1.4, label="I (inhibitory)")
+    ax0.plot(t[win], a.r[win], color=S.VIOLET, lw=1.8, label="synchrony r(t)")
+    ax0.set_ylim(0, 1.08)
+    ax0.set_xlabel("time  (s)")
+    ax0.set_ylabel("activity  /  synchrony")
+    ax0.set_title("1. The E/I beta limit cycle and synchrony")
+    ax0.legend(loc="upper right", ncol=3)
+    S.tidy(ax0, xgrid=False)
 
-    # --- Panel 2: instantaneous synchrony r(t) ---------------------------------
-    ax1.plot(ts.t_s * 1e3, ts.r, lw=1.4, color="#16a085")
-    ax1.axhline(ts.mean_synchrony, color="#e67e22", ls="--", lw=1.2,
-                label=f"mean s = {ts.mean_synchrony:.2f}")
-    ax1.set_ylim(0, 1.02)
-    ax1.set_xlim(0, min(200, ts.t_s[-1] * 1e3))
-    ax1.set_xlabel("time (ms)")
-    ax1.set_ylabel("synchrony  r(t)  (Kuramoto order parameter)")
-    ax1.set_title("2. Population synchrony tracks the rhythm")
-    ax1.legend(loc="upper right", fontsize=8)
-    ax1.grid(alpha=0.3)
+    # --- Panel 2: power spectrum of E(t) -------------------------------------------
+    f = sp.freqs_hz
+    keep = f <= 80
+    p = sp.power[keep] / sp.power[keep].max()
+    ax1.fill_between(f[keep], p, color=S.DIRECT, alpha=0.18, zorder=2)
+    ax1.plot(f[keep], p, color=S.DIRECT, lw=1.8, zorder=3)
+    fpk = sp.dominant_freq_hz
+    ax1.annotate(f"beta {fpk:.0f} Hz", xy=(fpk, 1.0), xytext=(fpk + 12, 0.78),
+                 fontsize=9, color=S.INK, fontweight="bold",
+                 arrowprops=dict(arrowstyle="->", color=S.INK_2))
+    ax1.text(0.98, 0.55, f"content fraction\n{sp.content_fraction * 100:.0f}%",
+             transform=ax1.transAxes, ha="right", va="top", fontsize=8.5,
+             color=S.INK_2)
+    ax1.set_xlim(0, 80)
+    ax1.set_ylim(0, 1.08)
+    ax1.set_xlabel("frequency  (Hz)")
+    ax1.set_ylabel("normalized power")
+    ax1.set_title("2. E(t) power spectrum")
+    S.tidy(ax1, xgrid=False)
 
-    # --- Panel 3: power spectrum of E(t) with the content/envelope split -------
-    nonzero = spec.freqs_hz > 0
-    ax2.semilogy(spec.freqs_hz[nonzero], spec.power[nonzero], lw=1.3, color="#756bb1")
-    ax2.axvline(boundary_hz, color="#c0392b", ls=":", lw=1.3)
-    ax2.text(boundary_hz + 1, ax2.get_ylim()[1] * 0.3,
-             "envelope | content", color="#c0392b", fontsize=8, rotation=90,
-             va="top")
-    ax2.axvline(spec.dominant_freq_hz, color="#16a085", ls="--", lw=1.2,
-                label=f"f_c = {spec.dominant_freq_hz:.1f} Hz")
-    ax2.set_xlim(0, 120)
-    ax2.set_xlabel("frequency (Hz)")
-    ax2.set_ylabel("power of E(t)")
-    ax2.set_title(f"3. Spectrum (content fraction {spec.content_fraction:.2f})")
-    ax2.legend(loc="upper right", fontsize=8)
-    ax2.grid(alpha=0.3, which="both")
-
+    S.footer(fig, "Recomputed live from run_motor_cortex().activity. Synchrony is the "
+                  "Kuramoto order parameter r(t) the reduction reads as s.")
     return fig
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-o", "--output", type=Path, default=Path("plots/activity.png"))
-    parser.add_argument("--preset", choices=tuple(_PRESETS), default="gamma",
-                        help="rhythm preset (gamma | high-beta | low-beta)")
-    parser.add_argument("--show", action="store_true", help="also open a window")
+    parser.add_argument("--show", action="store_true")
     parser.add_argument("--dpi", type=int, default=150)
     args = parser.parse_args()
 
     import matplotlib
-
     if not args.show:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig = build_figure(preset=args.preset)
-    fig.savefig(args.output, dpi=args.dpi, bbox_inches="tight")
-    print(f"wrote {args.output.resolve()}")
+    fig = build_figure()
+    S.save(fig, args.output, dpi=args.dpi)
     if args.show:
         plt.show()
 

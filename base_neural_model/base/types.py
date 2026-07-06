@@ -76,6 +76,32 @@ class VoxelGeometry:
             depth_m=1.8e-3,       # ~1.8 mm: M1 layer 5 below the pial surface
         )
 
+    @classmethod
+    def motor_cortex_active_column(cls) -> VoxelGeometry:
+        """Optimistic engineering-gap M1 voxel: the axial extent is the coherently-active
+        cortical column, not the range gate.
+
+        The transduction chain integrates the volumetric strain over ``extent_axial_m`` to
+        get Delta z (``Delta z`` is linear in ``L``). :meth:`motor_cortex_layer5` sets that
+        to the ~0.3 mm range gate; here it is the ~1.5 mm depth of the coherently-dilating
+        M1 column (M1 cortex is ~3 mm thick), a x5 lever. The lateral extent is unchanged,
+        so the somatotopic **finger separation (a lateral axis) is unaffected** -- the cost
+        of the longer axial gate is *depth* resolution, not effector separability.
+
+        Caveats (physically possible, not certain): it assumes the dilatation stays
+        phase-coherent over the column depth (unmeasured). ``neuron_count`` is set to
+        ~105,000, consistent with r=8 um at f_cell 0.15 in the 1.5x1x1 mm voxel
+        (``check_volume_fraction_consistency``); it feeds only the incoherent pedestal, not
+        the coherent Delta z. Pair with :meth:`MechanicsParams.motor_cortex_optimistic` and
+        :meth:`~base_neural_model.forward.detection.AcquisitionParams.demo_motor_engineering`.
+        """
+        return cls(
+            extent_axial_m=1.5e-3,    # coherently-active M1 column depth (vs 0.3 mm range gate)
+            extent_lateral_m=1e-3,    # unchanged: lateral finger-separation resolution preserved
+            neuron_count=105_000,     # consistent with r=8 um at f_cell 0.15 in 1.5x1x1 mm
+            depth_m=1.8e-3,           # ~1.8 mm: M1 layer 5 below the pial surface
+        )
+
     @property
     def volume_m3(self) -> float:
         """Voxel volume, metres^3.
@@ -221,6 +247,33 @@ class MechanicsParams:
             correlation_coherent_fraction=0.7,  # mutually phase-coherent fraction (S6)
             saturation_strain=1.0e-2,          # ECS/membrane strain cap (S7; non-binding here)
         )
+
+    @classmethod
+    def motor_cortex_optimistic(cls) -> MechanicsParams:
+        """Optimistic engineering-gap M1 source params: :meth:`motor_cortex` with the two
+        *non-normalized* physical levers pushed to their favourable-but-possible values.
+
+        Only the source terms with genuine physical headroom move; everything else --
+        including the honest source-transfer sub-factors (S1/S3/S6, real irreducible
+        attenuations) and the columnar directional channel -- stays at the honest value.
+
+        * ``cell_radius_m`` 20 -> 8 um: the tissue volumetric strain goes as ``3 dr/r``,
+          i.e. as ``1/r`` at fixed volume fraction (swelling is a surface phenomenon;
+          smaller cells / finer neuropil pack more membrane area per volume). x2.5 strain.
+          Contestable on whether the finest processes swell per unit area.
+        * ``dilatation_eta`` 0.5 -> 1.0: the undrained fast-timescale limit. Poroelastic
+          drainage into the ECS reservoir is negligible on the millisecond content-band
+          timescale, so eta -> 1 is the correct fast-band ceiling, not merely a dial. (<= 1.)
+
+        Delta r is NOT touched (locked whole-cell 0.4 nm; raising it double-counts the
+        within-cell cancellation the synchrony factor relies on -- and ``run_neural_model``
+        re-pins it from the cited constant regardless). Pair with
+        :meth:`VoxelGeometry.motor_cortex_active_column` and
+        :meth:`~base_neural_model.forward.detection.AcquisitionParams.demo_motor_engineering`.
+        """
+        from dataclasses import replace
+
+        return replace(cls.motor_cortex(), cell_radius_m=8e-6, dilatation_eta=1.0)
 
     def check_volume_fraction_consistency(
         self, geom: VoxelGeometry, *, rel_tol: float = 0.1

@@ -11,7 +11,11 @@ from __future__ import annotations
 import pytest
 
 from base_neural_model.forward.detection import AcquisitionParams
-from base_neural_model.model import run_motor_demo, run_neural_model
+from base_neural_model.model import (
+    run_motor_demo,
+    run_motor_demo_optimistic,
+    run_neural_model,
+)
 
 
 @pytest.fixture(scope="module")
@@ -124,6 +128,44 @@ def test_motor_demo_content_band_is_far_under_but_envelope_is_large():
     # Both receive-side gains are still load-bearing on the (honest) floor.
     raw_floor = d.floor_m * d.integration_gain * d.beamforming_gain
     assert d.surviving_dz_m < raw_floor
+
+
+def test_motor_demo_optimistic_reaches_the_engineering_gap():
+    """The optimistic engineering-gap counterpart: within ~1-2 orders, nothing impossible.
+
+    Composing the physically-achievable best of every contestable lever -- source r=8 um,
+    eta=1 (undrained fast limit), L=1.5 mm active column; acoustics at the safety-capped
+    echo SNR, aberration-corrected aperture, thermal-independent integration with the beta
+    burst kept -- lifts the honest ~-60 dB verdict into the spec's claimed "one to two
+    orders" engineering gap (~-25 dB), while every guardrail holds: Delta r locked, eta<=1,
+    kappa>=1/3, and the echo SNR within the transcranial safety ceiling.
+    """
+    from base_neural_model.base.types import MechanicsParams
+    from base_neural_model.forward.safety import echo_snr_within_safety
+    from base_neural_model.mechanics.neuron_constants import (
+        get_single_neuron_displacement,
+    )
+
+    opt = run_motor_demo_optimistic()
+    hon = run_motor_demo()
+    assert opt.detection is not None and hon.detection is not None
+    # The verdict lands in the engineering-gap band (~1-1.5 orders under floor)...
+    assert -32.0 < opt.detection.snr_db < -18.0
+    # ...and is materially (>25 dB) better than the honest preset, which is unchanged.
+    assert opt.detection.snr_db - hon.detection.snr_db > 25.0
+    assert hon.detection.snr_db < -40.0                     # honest preset untouched
+
+    # --- physical-possibility guardrails ---
+    # Delta r locked to the cited whole-cell 0.4 nm (source-side; not raised).
+    assert MechanicsParams.motor_cortex_optimistic().membrane_disp_m == pytest.approx(
+        get_single_neuron_displacement().value_m
+    )
+    # eta <= 1 (undrained fast ceiling) and kappa >= 1/3.
+    assert opt.mechanical_displacement.dilatation_eta <= 1.0
+    assert opt.mechanical_displacement.confinement_kappa >= 1.0 / 3.0
+    # Echo SNR within the transcranial MI/thermal safety ceiling (unlike the honest demo).
+    assert echo_snr_within_safety(AcquisitionParams.demo_motor_engineering()) is True
+    assert opt.detection.snr_exceeds_safety is False
 
 
 def test_clutter_limited_run_reports_clutter():

@@ -151,6 +151,44 @@ by the 1 Hz clutter high-pass (fUS instead uses power-Doppler, a different modal
 honest reading is: the specific fast neuromechanical readout is far under, while the thing
 that *is* detectable is ordinary functional ultrasound.
 
+## The optimistic engineering-gap counterpart — `run_motor_demo_optimistic()`
+
+The honest −60 dB is the *pessimistic* end of a range; the spec's Stage 0 claims the gap is
+"one to two orders," not three. `run_motor_demo_optimistic()`
+([`run.py`](../base_neural_model/model/run.py)) composes the other end: every **contestable**
+lever at its favourable-but-**physically-possible** value, with the neural biology and Δr
+held fixed. It reports a content-band verdict of **≈ −25 dB (~1.25 orders under floor)** —
+squarely inside the spec's engineering gap — via a **67 nm** floor and a **3.8 nm** surviving
+signal (vs 184 nm / 0.19 nm honest).
+
+Each moved lever, and why none is physically impossible:
+
+- **Source** ([`MechanicsParams.motor_cortex_optimistic`](../base_neural_model/base/types.py),
+  [`VoxelGeometry.motor_cortex_active_column`](../base_neural_model/base/types.py)):
+  `r` 20→8 µm (strain ∝ 1/r at fixed f_cell — finer neuropil surface-to-volume, ×2.5);
+  `η` 0.5→1.0 (the undrained fast-timescale ceiling — poroelastic drainage is negligible at
+  ms); `L` 0.3→1.5 mm (the coherently-active M1 column, not the range gate — Δz ∝ L; the cost
+  is *depth* resolution, not the lateral finger-separation axis).
+- **Floor** ([`AcquisitionParams.demo_motor_engineering`](../base_neural_model/forward/detection.py)):
+  echo SNR **capped at the 28 dB transcranial safety ceiling** (lower than the honest 30 dB —
+  `echo_snr_within_safety` is now True where it was False); aperture coherence 0.6→0.9 (the
+  metamaterial correction the architecture is built around); and the 2 ms frame-decorrelation
+  cap removed so N_ens is the burst-window 800 (thermal-independent frames), resolving the
+  D1/echo-SNR-limited tension.
+
+**Held fixed** (not levers): Δr (the cited whole-cell 0.4 nm — `run_neural_model` re-pins it;
+raising it double-counts within-cell cancellation), the honest source-transfer sub-factors
+(S1/S3/S6), the neural synchrony/jitter/orientation, and the safety cap. The guardrails
+`η ≤ 1`, `κ ≥ 1/3`, and `echo_snr_within_safety` are pinned in
+[`test_model_run.py`](../tests/test_model_run.py) and
+[`test_detection.py`](../tests/test_detection.py).
+
+The reading: honest and optimistic bracket the *same* signal — ~3 orders under at the
+pessimistic end, ~1.25 at the physically-achievable-best end. Neither flips the sign; the
+fast, effector-specific carrier is under the through-skull floor across the whole plausible
+range, and the spread between the two is almost entirely the two D1 integration caps plus the
+aberration-correction and safety-cap accounting.
+
 ## The budget sweep — where is the wall, and which axis carries the verdict
 
 [`budget.py`](../base_neural_model/forward/budget.py) turns the single Gate-A point into

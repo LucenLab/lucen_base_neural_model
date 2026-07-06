@@ -1,15 +1,15 @@
-"""Visualize deliverable (a): the activity-driven tissue displacement dz(t).
+"""Deliverable (a): the activity-driven displacement timeseries dz(t) across a movement.
 
-The headline dynamic product. The activity layer's synchrony trajectory r(t) drives
-the transduction chain, producing the net axial tissue displacement dz(t); this
-figure reads it back from the live model (:func:`base_neural_model.model.
-run_neural_model`) and shows dz(t) alongside its driving synchrony, plus the
-content-band power spectrum of dz(t).
+A steady rhythm gives a near-flat dz(t); the M1 story that moves is a MOVEMENT TRIAL. The
+motor drive imposes the sensorimotor signature -- resting beta, suppression (desynchrony)
+at movement onset, then a rebound above baseline -- and because the tissue displacement
+tracks synchrony, dz(t) shows the same arc. Panel 1 overlays dz(t) (raw and after the
+jitter low-pass) with the synchrony that drives it; the movement window is shaded. Panel 2
+is the content-band spectrum of the steady rhythm and its beta line.
 
 Run::
 
-    uv sync --group viz
-    uv run python scripts/plot_displacement_timeseries.py        # writes dz_t.png
+    uv run python scripts/plot_displacement_timeseries.py            # writes dz_t.png
     uv run python scripts/plot_displacement_timeseries.py --show
 """
 
@@ -18,103 +18,108 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from base_neural_model.base.units import m_to_nm
-from base_neural_model.model.run import run_motor_cortex, run_neural_model
+import _style as S
+import numpy as np
+
+from base_neural_model import run_motor_cortex, run_motor_trial
+from base_neural_model.activity.motor_drive import MovementProfile
+
+_ONSET_S = 0.4
+_MOVE_S = 0.3
 
 
-def _report_for(preset: str):
-    """Full-chain report for a rhythm preset (the right voxel/mechanics per region)."""
-    if preset == "gamma":
-        return run_neural_model(), "generic cortex, gamma"
-    if preset == "high-beta":
-        return run_motor_cortex(), "M1, high-beta"
-    if preset == "low-beta":
-        return run_motor_cortex(low_beta=True), "M1, low-beta"
-    raise ValueError(f"unknown preset {preset!r}")
-
-
-def build_figure(*, preset: str = "gamma"):
+def build_figure():
     import matplotlib.pyplot as plt
 
-    report, label = _report_for(preset)
-    ts = report.displacement_timeseries
-    spec = report.spectrum
-    state = report.neural_state
-    md = report.mechanical_displacement
+    S.apply_style()
+    profile = MovementProfile(onset_time_s=_ONSET_S, move_duration_s=_MOVE_S)
+    trial = run_motor_trial(profile)
+    ts = trial.displacement_timeseries
+    steady = run_motor_cortex()
+    sp = steady.spectrum
 
-    dz_nm = m_to_nm(ts.surviving_dz)
-    coherent_nm = m_to_nm(md.value_m)
-    surviving_nm = m_to_nm(md.value_m * md.content_band_survival)
-    survival_pct = 100.0 * md.content_band_survival
+    fig = plt.figure(figsize=(13.5, 5.6))
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.5, 1.0], left=0.06, right=0.98,
+                          top=0.80, bottom=0.14, wspace=0.24)
+    ax0 = fig.add_subplot(gs[0, 0])
+    ax1 = fig.add_subplot(gs[0, 1])
 
-    fig = plt.figure(figsize=(14, 4.6), constrained_layout=True)
-    fig.suptitle(
-        f"Activity-driven tissue displacement ({label})   "
-        f"s = {state.synchrony_fraction:.2f}   f_c = {state.content_freq_hz:.1f} Hz   "
-        f"predicted dz = {surviving_nm:.2f} nm  "
-        f"(coherent {coherent_nm:.2f} nm x {survival_pct:.0f}% jitter survival)",
-        fontsize=12, fontweight="bold",
+    S.suptitle(
+        fig,
+        "Displacement timeseries dz(t)  |  motor cortex (M1)",
+        "A movement trial: resting beta -> suppression at onset -> rebound. The tissue "
+        "displacement tracks the synchrony.",
     )
-    ax0, ax1, ax2 = fig.subplots(1, 3)
 
-    # --- Panel 1: dz(t), content-surviving displacement ------------------------
-    ax0.plot(ts.t_s * 1e3, dz_nm, lw=1.4, color="#2c7fb8")
-    ax0.axhline(surviving_nm, color="#e67e22", ls="--", lw=1.2,
-                label=f"predicted dz = {surviving_nm:.2f} nm")
-    ax0.set_xlim(0, min(200, ts.t_s[-1] * 1e3))
-    ax0.set_xlabel("time (ms)")
-    ax0.set_ylabel("displacement dz(t)  (nm)")
-    ax0.set_title("1. Activity-driven displacement (deliverable a)")
-    ax0.legend(loc="upper right", fontsize=8)
-    ax0.grid(alpha=0.3)
+    # --- Panel 1: dz(t) (raw + surviving) with synchrony on a twin-free overlay -----
+    t = ts.t_s
+    ax0.axvspan(_ONSET_S, _ONSET_S + _MOVE_S, color=S.OSMOTIC, alpha=0.10, zorder=0)
+    ax0.text(_ONSET_S + _MOVE_S / 2, ts.dz.max() * 1e9 * 1.02, "movement",
+             ha="center", va="bottom", fontsize=8.5, color=S.OSMOTIC, fontweight="bold")
 
-    # --- Panel 2: the driving synchrony r(t) -----------------------------------
-    ax1.plot(ts.t_s * 1e3, ts.synchrony, lw=1.4, color="#16a085")
-    ax1.set_ylim(0, 1.02)
-    ax1.set_xlim(0, min(200, ts.t_s[-1] * 1e3))
-    ax1.set_xlabel("time (ms)")
-    ax1.set_ylabel("driving synchrony  r(t)")
-    ax1.set_title("2. dz(t) tracks the synchrony drive")
-    ax1.grid(alpha=0.3)
+    ax0.plot(t, ts.dz * 1e9, color=S.MUTED, lw=1.0, label="dz(t) raw")
+    ax0.plot(t, ts.surviving_dz * 1e9, color=S.DIRECT, lw=2.0,
+             label="dz(t) after jitter low-pass")
+    ax0.set_ylabel("axial displacement  (nm)")
+    ax0.set_xlabel("time  (s)")
+    ax0.set_title("1. dz(t) through a movement trial")
+    ax0.set_ylim(bottom=0)
+    ax0.legend(loc="lower right", ncol=2)
+    S.tidy(ax0, xgrid=False)
 
-    # --- Panel 3: content-band spectrum of dz(t) -------------------------------
-    nonzero = spec.freqs_hz > 0
-    ax2.semilogy(spec.freqs_hz[nonzero], spec.power[nonzero], lw=1.3, color="#756bb1")
-    # The content/envelope split line is the rhythm's own boundary (per-preset:
-    # ~30 Hz gamma, ~13 Hz beta), carried on the spectrum the model computed.
-    boundary_hz = spec.boundary_hz
-    ax2.axvline(boundary_hz, color="#c0392b", ls=":", lw=1.3)
-    ax2.text(boundary_hz + 1, ax2.get_ylim()[1] * 0.3,
-             "envelope | content", color="#c0392b", fontsize=8, rotation=90,
-             va="top")
-    ax2.set_xlim(0, 120)
-    ax2.set_xlabel("frequency (Hz)")
-    ax2.set_ylabel("power of dz(t)")
-    ax2.set_title(f"3. dz spectrum (content fraction {spec.content_fraction:.2f})")
-    ax2.grid(alpha=0.3, which="both")
+    # Annotate the three phases directly.
+    ymax = ts.dz.max() * 1e9
+    for tt, label, yfrac in [(0.15, "resting\nbeta", 0.90),
+                             (_ONSET_S + _MOVE_S / 2, "beta\nsuppressed", 0.55),
+                             (1.15, "beta\nrebound", 0.72)]:
+        i = np.argmin(np.abs(t - tt))
+        ax0.annotate(label, xy=(tt, ts.surviving_dz[i] * 1e9),
+                     xytext=(tt, ymax * yfrac),
+                     fontsize=7.8, color=S.INK_2, ha="center", va="center",
+                     arrowprops=dict(arrowstyle="->", color=S.MUTED, lw=0.8))
 
+    # --- Panel 2: content-band spectrum of the steady rhythm ------------------------
+    f = sp.freqs_hz
+    keep = f <= 60
+    ax1.fill_between(f[keep], sp.power[keep] / sp.power[keep].max(),
+                     color=S.DIRECT, alpha=0.18, zorder=2)
+    ax1.plot(f[keep], sp.power[keep] / sp.power[keep].max(), color=S.DIRECT, lw=1.8,
+             zorder=3)
+    ax1.axvline(sp.boundary_hz, color=S.INK_2, lw=1.0, ls="--")
+    ax1.text(sp.boundary_hz + 1, 0.92, f"content edge\n{sp.boundary_hz:.0f} Hz",
+             fontsize=8, color=S.INK_2, va="top")
+    # mark the beta peak
+    ipk = np.argmax(sp.power[keep])
+    fpk = f[keep][ipk]
+    ax1.annotate(f"beta {fpk:.0f} Hz", xy=(fpk, 1.0), xytext=(fpk + 8, 0.75),
+                 fontsize=8.5, color=S.INK, fontweight="bold",
+                 arrowprops=dict(arrowstyle="->", color=S.INK_2))
+    ax1.set_xlim(0, 60)
+    ax1.set_ylim(0, 1.08)
+    ax1.set_xlabel("frequency  (Hz)")
+    ax1.set_ylabel("normalized power")
+    ax1.set_title("2. Content-band spectrum (steady beta)")
+    S.tidy(ax1, xgrid=False)
+
+    S.footer(fig, "Recomputed live: dz(t) from run_motor_trial(); spectrum from "
+                  "run_motor_cortex(). Displacement is the surviving content-band dz.")
     return fig
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("-o", "--output", type=Path, default=Path("plots/dz_t.png"))
-    parser.add_argument("--preset", choices=("gamma", "high-beta", "low-beta"),
-                        default="gamma",
-                        help="rhythm preset (gamma | high-beta | low-beta)")
-    parser.add_argument("--show", action="store_true", help="also open a window")
+    parser.add_argument("--show", action="store_true")
     parser.add_argument("--dpi", type=int, default=150)
     args = parser.parse_args()
 
     import matplotlib
-
     if not args.show:
         matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    fig = build_figure(preset=args.preset)
-    fig.savefig(args.output, dpi=args.dpi, bbox_inches="tight")
-    print(f"wrote {args.output.resolve()}")
+    fig = build_figure()
+    S.save(fig, args.output, dpi=args.dpi)
     if args.show:
         plt.show()
 
