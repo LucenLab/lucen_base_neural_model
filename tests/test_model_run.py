@@ -92,7 +92,7 @@ def test_acquisition_attaches_detection_budget():
     assert d.integration_gain == pytest.approx(10.0, rel=1e-6)
     assert d.effective_n_elements == 154                 # aperture coherence 0.6
     assert d.aberration_floor_m > 0.0                    # residual-aberration floor present
-    assert d.snr_exceeds_safety is True                  # 30 dB > 28 dB transcranial ceiling
+    assert d.snr_exceeds_safety is False                 # corrected to the 28 dB safe ceiling
     assert d.floor_m > 0.0
     # The optimistic baseline still gives the historical x77 (the before/after audit).
     opt = run_neural_model(

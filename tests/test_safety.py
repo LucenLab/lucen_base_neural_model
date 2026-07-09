@@ -27,10 +27,16 @@ def test_ceiling_falls_with_skull_derating():
     assert max_per_element_echo_snr_db(20.0) < max_per_element_echo_snr_db(4.0)
 
 
-def test_demo_echo_snr_exceeds_safety_transcranially():
-    """The demo assumes 30 dB per-element, above the 28 dB safe ceiling at 12 dB skull."""
-    acq = AcquisitionParams.demo_motor()  # echo_snr_linear = 1e3 -> 30 dB, skull 12 dB
-    assert echo_snr_within_safety(acq) is False
+def test_demo_echo_snr_at_safety_ceiling():
+    """The corrected demo assumes 28 dB per-element -- AT the safe ceiling at 12 dB skull.
+
+    The prior demo assumed an unsafe 30 dB (which D6 flagged as exceeding the ceiling);
+    the honest correction lowers it to the 28 dB transcranial safety ceiling, so the demo
+    is now WITHIN safety. A hypothetical 30 dB still exceeds it."""
+    acq = AcquisitionParams.demo_motor()  # echo_snr_linear = 10**2.8 -> 28 dB, skull 12 dB
+    assert echo_snr_within_safety(acq) is True
+    unsafe = replace(acq, echo_snr_linear=1.0e3)  # 30 dB, the prior unsafe assumption
+    assert echo_snr_within_safety(unsafe) is False
 
 
 def test_thin_skull_clears_safety():

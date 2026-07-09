@@ -67,8 +67,8 @@ def _chain_stages():
          f"eta {eta} . kappa {kappa}"),
         ("x honest source factors", dz_after_transfer, S.DIRECT,
          f"viscoelastic . carrier . coherent = {transfer:.2f}"),
-        ("+ directional (Betz) term", total, S.VIOLET,
-         "monopole + deviatoric shape channel"),
+        ("+/- directional (Betz) term", total, S.VIOLET,
+         "monopole -/+ deviatoric shape channel (fibre geometry -> subtracts)"),
     ]
     return report, stages, total
 
@@ -80,6 +80,7 @@ def build_figure():
     report, stages, total = _chain_stages()
     floor = report.detection.floor_m
     snr = report.detection.snr_db
+    dr = stages[1][1]  # one cell's dr (the cited constant), for the live subtitle/footer
 
     fig = plt.figure(figsize=(13.5, 6.4))
     gs = fig.add_gridspec(1, 2, width_ratios=[1.55, 1.0], left=0.06, right=0.985,
@@ -90,8 +91,8 @@ def build_figure():
     S.suptitle(
         fig,
         "The transduction chain  |  motor cortex (M1)",
-        "0.4 nm per-neuron membrane swelling  ->  ~0.27 nm voxel signal.  "
-        "The naive 'N x dr' counts a coherent piston-stroke the geometry forbids.",
+        f"{dr * 1e9:.1f} nm per-neuron membrane swelling  ->  ~{total * 1e9:.3g} nm voxel "
+        "signal.  The naive 'N x dr' counts a coherent piston-stroke the geometry forbids.",
     )
 
     # --- Panel 1: the cascade, log axis so every order of magnitude is visible -------
@@ -141,11 +142,11 @@ def build_figure():
     ax1.text(0.5, ytxt, f"  {snr:+.1f} dB\n  ~{abs(snr):.0f} dB under",
              ha="left", va="center", fontsize=10, fontweight="bold", color=S.INK)
     ax1.set_title("Signal vs floor")
-    S.caption(ax1, "echo-SNR limited: sensing tweaks\ndo not close a ~50 dB physics gap",
-              loc="upper right")
+    S.caption(ax1, f"echo-SNR limited: sensing tweaks\ndo not close a ~{abs(snr):.0f} dB "
+                   "physics gap", loc="upper right")
 
-    S.footer(fig, "Recomputed live from run_motor_demo(); the M1 preset at the cited "
-                  "0.4 nm whole-cell Delta r. Bars are axial displacement.")
+    S.footer(fig, f"Recomputed live from run_motor_demo(); the M1 preset at the cited "
+                  f"{dr * 1e9:.1f} nm whole-cell Delta r. Bars are axial displacement.")
     return fig
 
 

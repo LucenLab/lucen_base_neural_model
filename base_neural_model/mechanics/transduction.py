@@ -229,8 +229,13 @@ def mechanical_displacement(
     )
     axial_dir = params.deviatoric_eta * gate_len_m * eps_dir
 
-    # The beam reads the magnitude of the total axial coherent displacement.
-    axial_total = abs(axial_iso + axial_dir)
+    # The beam reads the magnitude of the total axial coherent displacement. The
+    # directional term carries a geometry SIGN (params.deviatoric_sign): +1 for the
+    # soma-elongated-along-column convention (deviatoric axial ADDS), -1 for the
+    # radially-swelling-fibre geometry that is the physically relevant one for the fast
+    # band (aligned axon/dendrite neuropil interrogated along its length -> deviatoric
+    # axial SUBTRACTS; orientation.py module docstring).
+    axial_total = abs(axial_iso + params.deviatoric_sign * axial_dir)
 
     survival = _content_band_survival(params.jitter_sigma_s, params.content_freq_hz)
 

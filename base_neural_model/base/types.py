@@ -171,6 +171,11 @@ class MechanicsParams:
     # carried the volumetric eta -- a category error that under-counted the shape channel.
     # A reviewer who wants the old coupled behaviour can set this equal to dilatation_eta.
     deviatoric_eta: float = 1.0
+    # Geometry SIGN of the deviatoric axial term: +1 (soma elongated along the column,
+    # deviatoric axial adds) or -1 (radially-swelling fibre read along its length, the
+    # physically relevant fast-band geometry per orientation.py -> deviatoric axial
+    # subtracts). Default +1 preserves the isotropic/soma construction.
+    deviatoric_sign: float = 1.0
     # nu for the deviatoric Eshelby response ONLY (orientation.py); see the note on
     # confinement_kappa above for why this legitimately differs from kappa's nu.
     matrix_poisson_ratio: float = 0.2
@@ -224,11 +229,13 @@ class MechanicsParams:
             # this from the cited constant at runtime (Invariant 2); carrying the SAME
             # value in the preset keeps a direct mechanical_displacement(preset) call from
             # tripping the d_single == membrane_disp_m guard. Was 1.5e-9 (old local-peak).
-            membrane_disp_m=0.4e-9,
+            membrane_disp_m=0.3e-9,     # cited whole-cell MIDPOINT of 0.2-0.4 nm (was 0.4, the max)
             cell_radius_m=20e-6,        # large layer-5 / Betz somata (vs ~8 um generic)
             cell_volume_fraction=0.15,
             confinement_kappa=0.5,
-            dilatation_eta=0.5,
+            dilatation_eta=0.1,         # compartment-consistent fast-band eta (mechanisms.py:
+                                        # AP swelling draws ECS water at ~conserved volume ->
+                                        # small net dilatation ~0.05-0.1, was 0.5)
             jitter_sigma_s=1.0e-3,
             content_freq_hz=20.0,       # beta-band content corner
             anisotropy=0.6,             # elongated, columnar cells -> deviatoric strain
@@ -237,7 +244,12 @@ class MechanicsParams:
             # drainage fraction eta (which gates a VOLUME change competing with the ECS
             # water reservoir) does not apply to it -- see MechanicsParams.deviatoric_eta.
             deviatoric_eta=1.0,
-            mean_axis_projection=1.0,   # beam ~ along the cortical column
+            # Fast-band fibre geometry: aligned axon/dendrite neuropil interrogated along
+            # its length swells RADIALLY, so the deviatoric axial term SUBTRACTS from the
+            # monopole (orientation.py). Was +1 (soma-positive), which the docstring flags
+            # as likely wrong for the fast band.
+            deviatoric_sign=-1.0,
+            mean_axis_projection=0.7,   # realistic beam-vs-column misalignment (was 1.0, perfect)
             matrix_poisson_ratio=0.2,
             # Honest source-physics factors (flipped on for the demo preset; contestable
             # inputs like eta). At the generic column these stay inert (central()).

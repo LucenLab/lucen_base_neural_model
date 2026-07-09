@@ -89,15 +89,21 @@ def test_motor_voxel_at_layer5_depth():
 
 def test_motor_run_has_directional_contribution():
     """The columnar alignment, expressed through synchrony, makes the directional
-    channel contribute a real share of the M1 signal - unlike the generic model."""
+    channel contribute a real share of the M1 signal - unlike the generic model.
+
+    The fast-band fibre geometry (deviatoric_sign = -1, orientation.py) makes the
+    directional term SUBTRACT from the monopole, so the total is |iso - dir|, not
+    iso + dir. The channel is still material -- it moves the total -- but downward."""
     report = run_motor_cortex(duration_s=0.5, fs_hz=2000.0)
     md = report.mechanical_displacement
     assert md.directional_axial_m > 0.0
     assert md.orientation_coherence > 0.0
-    # The total is the isotropic plus the (positive) directional term.
+    # The total is the isotropic term with the SIGNED directional term (fibre geometry
+    # subtracts): |iso - dir| for the motor preset's deviatoric_sign = -1.
     assert md.value_m == pytest.approx(
-        md.isotropic_axial_m + md.directional_axial_m
+        abs(md.isotropic_axial_m - md.directional_axial_m)
     )
+    assert md.value_m < md.isotropic_axial_m   # the directional term pulls the total down
 
 
 def test_generic_run_has_no_directional_contribution():

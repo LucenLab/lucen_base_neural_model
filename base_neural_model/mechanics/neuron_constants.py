@@ -37,7 +37,7 @@ from base_neural_model.base.types import NeuronDisplacement
 # figure used at the whole-cell chain position -- the actual error this revision fixes.
 CITED_DISPLACEMENT_MIN_M: float = 0.2e-9  # whole-cell mammalian lower edge (ACS Nano 2018)
 CITED_DISPLACEMENT_MAX_M: float = 0.4e-9  # whole-cell mammalian upper edge (PNAS 2020, QPI)
-_CITED_DISPLACEMENT_M: float = 0.4e-9     # metres (~0.4 nm), content band, mammalian, whole-cell
+_CITED_DISPLACEMENT_M: float = 0.3e-9     # metres (~0.3 nm), MIDPOINT of the 0.2-0.4 nm whole-cell range (was 0.4, the max)
 
 _CITED_PROVENANCE = Provenance(
     source="Yang et al. 2018 (ACS Nano) & Ling et al. 2020 (PNAS) - optical "

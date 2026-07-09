@@ -97,6 +97,13 @@ class AcquisitionParams:
     frame_decorrelation_time_s: float | None = None  # D1: tissue decorr time; None -> 1/f_frame
     echo_correlation: float = 1.0                # D5: per-estimate echo correlation rho in (0,1]
     aberration_phase_rad: float = 0.0            # D3: residual temporal aberration phase (rad)
+    aberration_jitter_m: float = 0.0             # D3b: in-band aberration-JITTER displacement
+                                                 # floor (m). The time-varying residual skull
+                                                 # wavefront error is an effective path-length
+                                                 # RMS: its PHASE scales ~f0 (path error in
+                                                 # wavelengths), so the DISPLACEMENT floor is
+                                                 # frequency-INDEPENDENT and does not average
+                                                 # down. Adds in quadrature. Inert at 0.
     aperture_coherence: float = 1.0              # D4: coherent aperture fraction in (0,1]
     clutter_highpass_hz: float = 0.0             # D2: SVD/clutter high-pass cutoff, Hz
     reverberation_ratio: float = 0.0             # D8: reverb clutter as a multiple of the phase floor
@@ -135,6 +142,10 @@ class AcquisitionParams:
             raise ValueError(
                 f"aberration_phase_rad must be >= 0, got {self.aberration_phase_rad!r}"
             )
+        if self.aberration_jitter_m < 0.0:
+            raise ValueError(
+                f"aberration_jitter_m must be >= 0, got {self.aberration_jitter_m!r}"
+            )
         if not 0.0 < self.aperture_coherence <= 1.0:
             raise ValueError(
                 f"aperture_coherence must lie in (0, 1], got {self.aperture_coherence!r}"
@@ -166,7 +177,9 @@ class AcquisitionParams:
             center_freq_hz=2e6,
             frame_rate_hz=4000.0,
             epoch_s=1.5,
-            echo_snr_linear=1.0e3,       # ~30 dB free-field PER-ELEMENT echo SNR
+            echo_snr_linear=10**2.8,     # 28 dB: the transcranial MI/thermal safety ceiling at
+                                         # 12 dB skull (safety.max_per_element_echo_snr_db), NOT
+                                         # the prior unsafe 30 dB (which D6 flagged as EXCEEDS)
             skull_loss_db_oneway=12.0,   # temporal-window bone, one-way (~24 dB two-way)
             n_elements=256,              # 256-element temporal-window aperture (spec 3.2)
             coherence_time_s=0.2,        # beta burst window (eLife 80160; ~150-300 ms)
@@ -414,7 +427,11 @@ def phase_displacement_floor(acq: AcquisitionParams) -> float:
 
     With the inert defaults this reduces exactly to the prior Walker-Trahey-only floor.
     """
-    return math.hypot(walker_trahey_floor(acq), aberration_displacement_floor(acq))
+    return math.hypot(
+        walker_trahey_floor(acq),
+        aberration_displacement_floor(acq),
+        acq.aberration_jitter_m,
+    )
 
 
 # Which denominator pins the detection floor. "echo_snr" => the through-skull phase floor

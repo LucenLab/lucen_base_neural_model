@@ -163,7 +163,9 @@ class EIParams:
             theta_i=3.7,
             drive_e=1.3,
             drive_i=0.0,
-            structural_alignment=0.9,  # layer-5 pyramidal columns: strongly aligned
+            structural_alignment=0.6,  # layer-5 pyramidal columns, DISCOUNTED for the
+                                        # real orientation dispersion of apical dendrites
+                                        # (was 0.9, near-perfect alignment)
             provenance=Provenance(
                 source=(
                     "Wilson & Cowan E/I mean field tuned to the M1 high-beta rhythm; "
@@ -219,7 +221,7 @@ class EIParams:
             theta_i=3.7,
             drive_e=1.3,     # same drive as high-beta; the slower loop sets the lower freq
             drive_i=0.0,
-            structural_alignment=0.9,  # same M1 layer-5 columnar alignment
+            structural_alignment=0.6,  # same M1 layer-5 columnar alignment, dispersion-discounted
             provenance=Provenance(
                 source=(
                     "Wilson & Cowan E/I mean field tuned to the M1 low-beta rhythm; "

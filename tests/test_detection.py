@@ -109,11 +109,13 @@ def test_demo_motor_engineering_is_physically_bounded():
     assert eng.integration_gain == pytest.approx(math.sqrt(800.0))
     # Aperture correction 0.6 -> 0.9.
     assert eng.effective_n_elements == 230
-    # The floor is materially lower than the honest preset's.
+    # The floor is materially lower than the honest preset's (better aperture + more
+    # integration, not a higher echo SNR -- both presets now sit at the 28 dB ceiling).
     assert phase_displacement_floor(eng) < phase_displacement_floor(hon)
-    # Physical-possibility guardrail: within safety here, exceeds it for the honest demo.
+    # Physical-possibility guardrail: BOTH are within safety now that the honest demo was
+    # corrected from an unsafe 30 dB down to the 28 dB transcranial ceiling.
     assert echo_snr_within_safety(eng) is True
-    assert echo_snr_within_safety(hon) is False
+    assert echo_snr_within_safety(hon) is True
 
 
 def test_coherence_window_bounded_by_clutter_highpass():

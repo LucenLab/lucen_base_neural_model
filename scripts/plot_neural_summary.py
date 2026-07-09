@@ -119,32 +119,37 @@ def build_figure():
     ax_surv.set_title("Jitter low-pass  exp(-2π²f²σ²)")
     S.tidy(ax_surv, xgrid=False)
 
-    # --- 3. The Delta z decomposition (stacked) -------------------------------------
+    # --- 3. The Delta z decomposition -----------------------------------------------
+    # The directional (Betz) term is now SIGNED: the fast-band fibre geometry makes it
+    # SUBTRACT from the monopole, so it cannot be stacked additively. Show the isotropic
+    # term, the total (iso + signed directional), and the incoherent pedestal as three
+    # independent bars, with the signed directional delta annotated.
     iso = md.isotropic_axial_m * 1e9
-    dirc = md.directional_axial_m * 1e9
-    ped = md.incoherent_pedestal_m * 1e9
     total = md.axial_displacement_m * 1e9
+    signed_dir = total - iso                       # signed directional contribution (nm)
+    ped = md.incoherent_pedestal_m * 1e9
 
-    ax_dz.bar(0, iso, width=0.62, color=S.ISO, label="isotropic (monopole)", zorder=3)
-    ax_dz.bar(0, dirc, bottom=iso + 0.003, width=0.62, color=S.DIR,
-              label="directional (Betz)", zorder=3)
-    ax_dz.bar(1, ped, width=0.62, color=S.PEDESTAL, label="incoherent pedestal", zorder=3)
-    ax_dz.set_xticks([0, 1])
-    ax_dz.set_xticklabels(["coherent\nsignal", "noise\npedestal"], fontsize=9)
+    ax_dz.bar(0, iso, width=0.6, color=S.ISO, label="isotropic (monopole)", zorder=3)
+    ax_dz.bar(1, total, width=0.6, color=S.DIR, label="total (iso +/- directional)", zorder=3)
+    ax_dz.bar(2, ped, width=0.6, color=S.PEDESTAL, label="incoherent pedestal", zorder=3)
+    ax_dz.set_xticks([0, 1, 2])
+    ax_dz.set_xticklabels(["isotropic\n(monopole)", "total\n(iso +/- dir)", "noise\npedestal"],
+                          fontsize=8.5)
     ax_dz.set_ylabel("axial displacement  (nm)")
     ax_dz.set_title("3. Predicted Delta z decomposition")
     ax_dz.legend(loc="upper right", fontsize=8)
 
-    # direct labels on the stack
-    ax_dz.text(0, iso / 2, f"{iso:.3f}", ha="center", va="center",
-               fontsize=8.5, color=S.SURFACE, fontweight="bold")
-    ax_dz.text(0, iso + dirc / 2, f"{dirc:.3f}", ha="center", va="center",
-               fontsize=8.5, color=S.SURFACE, fontweight="bold")
-    ax_dz.text(0, total + 0.012, f"total {total:.3f} nm", ha="center", va="bottom",
-               fontsize=9.5, color=S.INK, fontweight="bold")
-    ax_dz.text(1, ped + 0.012, f"{ped:.3f} nm", ha="center", va="bottom",
+    top = max(iso, total, ped)
+    ax_dz.text(0, iso + top * 0.02, f"{iso:.3f} nm", ha="center", va="bottom",
+               fontsize=8.5, color=S.INK, fontweight="bold")
+    ax_dz.text(1, total + top * 0.02, f"{total:.3f} nm", ha="center", va="bottom",
+               fontsize=8.5, color=S.INK, fontweight="bold")
+    ax_dz.text(2, ped + top * 0.02, f"{ped:.4f} nm", ha="center", va="bottom",
                fontsize=8.5, color=S.INK_2)
-    ax_dz.set_ylim(0, total * 1.28)
+    ax_dz.text(0.5, top * 0.55,
+               f"directional\n{signed_dir:+.3f} nm\n(fibre: subtracts)",
+               ha="center", va="center", fontsize=8, color=S.VIOLET, fontweight="bold")
+    ax_dz.set_ylim(0, top * 1.30)
     S.tidy(ax_dz, xgrid=False)
 
     S.footer(fig, "Recomputed live from run_motor_cortex() (steady resting beta). The "
