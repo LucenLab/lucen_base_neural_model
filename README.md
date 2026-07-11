@@ -36,7 +36,7 @@ r.all_gates_pass                        # the three kill gates
 
 # Opt into the acoustic detection layer (Gate A / Stage 1):
 r = run_motor_demo()                    # bursty motor imagery → honest detectability
-r.detection.snr_db                      # content-band (direct beta) SNR (≈ −65 dB honest)
+r.detection.snr_db                      # content-band (direct beta) SNR (≈ −88 dB honest)
 r.mechanisms.envelope_band_axial_m      # the large slow hemodynamic (fUS) envelope, S2
 r.detection.limiting_denominator        # "echo_snr" | "clutter"
 ```
@@ -153,10 +153,12 @@ and the floor also carries a **residual-aberration** term, an **echo-correlation
 and a **safety-capped** echo SNR. On the honest source side the cited Δr is the sub-nm
 mammalian value (~0.4 nm), the tissue is **viscoelastic** (not a static spring), and only
 the rate-modulated, mutually-coherent fraction lives at the beta carrier. The result: the
-direct-neuromechanical **content-band verdict is ≈ −65 dB** — the specific fast readout is
+direct-neuromechanical **content-band verdict is ≈ −88 dB** — the specific fast readout is
 far under the floor, not "within an order." The band-separated **mechanism decomposition**
 (`run_motor_demo().mechanisms`) makes the trade explicit: the slow **hemodynamic (CBV)
-envelope** is orders larger (≈ +13 dB) — but that is ordinary functional ultrasound, not the
-beta carrier. `demo_motor_optimistic()` preserves the prior ≈ −13 dB baseline for the
-before/after audit. The detection layer is opt-in: without an acquisition the build is
-purely a neural source model, not a detector.
+envelope** is orders larger (≈ +11 dB) — but that is ordinary functional ultrasound, not the
+beta carrier. `demo_motor(acquisition=demo_motor_optimistic())` recovers the prior
+all-favourable acoustic baseline at ≈ −65 dB for the before/after audit, and the full
+engineering-gap best case `run_motor_demo_optimistic()` lands at ≈ −30 dB. The detection
+layer is opt-in: without an acquisition the build is purely a neural source model, not a
+detector.

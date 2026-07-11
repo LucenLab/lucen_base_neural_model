@@ -96,8 +96,9 @@ def test_demo_motor_engineering_is_physically_bounded():
     Removing the 2 ms decorrelation cap makes the frames thermal-independent, so N_ens is
     the burst-window frame count (800), not the honest 100; the aperture correction lifts
     n_eff to round(0.9*256)=230. Critically the echo SNR is *within* the transcranial safety
-    ceiling (28 dB), where the honest demo (30 dB) exceeds it -- the 'nothing physically
-    impossible' guarantee, machine-checked.
+    ceiling (28 dB) -- the honest demo now sits at the same 28 dB ceiling (both corrected
+    down from the old unsafe 30 dB) -- the 'nothing physically impossible' guarantee,
+    machine-checked.
     """
     from base_neural_model.forward.safety import echo_snr_within_safety
 

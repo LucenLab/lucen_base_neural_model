@@ -8,10 +8,8 @@ inert defaults.
 
 from __future__ import annotations
 
-import math
 from dataclasses import replace
 
-import numpy as np
 import pytest
 
 from base_neural_model.activity.motor_drive import bursty_beta_drive

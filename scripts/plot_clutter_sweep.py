@@ -69,8 +69,10 @@ def build_figure():
     ax2.grid(alpha=0.3, which="both")
 
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    print("crossover at echo floor %.0f nm; verdict pinned at %.1f dB below it"
-          % (echo_floor * 1e9, base.detection.snr_db))
+    print(
+        f"crossover at echo floor {echo_floor * 1e9:.0f} nm; "
+        f"verdict pinned at {base.detection.snr_db:.1f} dB below it"
+    )
     return fig
 
 

@@ -108,8 +108,8 @@ def test_motor_demo_content_band_is_far_under_but_envelope_is_large():
     With the honest source physics (sub-nm Delta r, viscoelastic transfer, carrier depth,
     coherent fraction) and the honest acoustic terms (burst-limited integration, aperture
     decoherence, residual aberration, safety-capped echo SNR), the direct neuromechanical
-    beta content sits ~50+ dB under the through-skull floor -- not the prior -13 dB
-    'within an order'. The band-separated decomposition makes the trade explicit: the slow
+    beta content sits ~88 dB under the through-skull floor -- not the old acoustic-only
+    -13 dB 'within an order'. The band-separated decomposition makes the trade explicit: the slow
     hemodynamic (vascular/CBV) envelope is orders LARGER (the fUS signal), but it is the
     envelope, not the specific beta carrier the phase-displacement readout targets.
     """
@@ -136,8 +136,8 @@ def test_motor_demo_optimistic_reaches_the_engineering_gap():
     Composing the physically-achievable best of every contestable lever -- source r=8 um,
     eta=1 (undrained fast limit), L=1.5 mm active column; acoustics at the safety-capped
     echo SNR, aberration-corrected aperture, thermal-independent integration with the beta
-    burst kept -- lifts the honest ~-60 dB verdict into the spec's claimed "one to two
-    orders" engineering gap (~-25 dB), while every guardrail holds: Delta r locked, eta<=1,
+    burst kept -- lifts the honest ~-88 dB verdict into the spec's claimed "one to two
+    orders" engineering gap (~-30 dB), while every guardrail holds: Delta r locked, eta<=1,
     kappa>=1/3, and the echo SNR within the transcranial safety ceiling.
     """
     from base_neural_model.base.types import MechanicsParams
@@ -156,14 +156,15 @@ def test_motor_demo_optimistic_reaches_the_engineering_gap():
     assert hon.detection.snr_db < -40.0                     # honest preset untouched
 
     # --- physical-possibility guardrails ---
-    # Delta r locked to the cited whole-cell 0.4 nm (source-side; not raised).
+    # Delta r locked to the cited whole-cell 0.3 nm midpoint (source-side; not raised).
     assert MechanicsParams.motor_cortex_optimistic().membrane_disp_m == pytest.approx(
         get_single_neuron_displacement().value_m
     )
     # eta <= 1 (undrained fast ceiling) and kappa >= 1/3.
     assert opt.mechanical_displacement.dilatation_eta <= 1.0
     assert opt.mechanical_displacement.confinement_kappa >= 1.0 / 3.0
-    # Echo SNR within the transcranial MI/thermal safety ceiling (unlike the honest demo).
+    # Echo SNR within the transcranial MI/thermal safety ceiling (as is the honest demo,
+    # which now sits at the same 28 dB ceiling).
     assert echo_snr_within_safety(AcquisitionParams.demo_motor_engineering()) is True
     assert opt.detection.snr_exceeds_safety is False
 
@@ -173,6 +174,26 @@ def test_clutter_limited_run_reports_clutter():
     r = run_motor_demo(residual_clutter_m=1e-5)
     assert r.detection is not None
     assert r.detection.limiting_denominator == "clutter"
+
+
+def test_flagship_verdicts_match_the_documented_numbers():
+    """Pin the three headline dB figures quoted in the README and docs, so they cannot
+    drift out of sync with the code again.
+
+    These are the numbers the honest-physics parameters currently produce:
+    honest ``run_motor_demo`` is ~-88 dB; the same honest source through the all-favourable
+    acoustic baseline is ~-65 dB; the full engineering-gap best case is ~-30 dB. Tolerances
+    are wide enough to absorb rounding in the prose but tight enough to catch a real shift.
+    """
+    honest = run_motor_demo().detection
+    acoustic_baseline = run_motor_demo(
+        acquisition=AcquisitionParams.demo_motor_optimistic()
+    ).detection
+    engineering = run_motor_demo_optimistic().detection
+
+    assert honest.snr_db == pytest.approx(-87.8, abs=1.5)          # README "≈ −88 dB"
+    assert acoustic_baseline.snr_db == pytest.approx(-65.4, abs=1.5)  # docs "≈ −65 dB"
+    assert engineering.snr_db == pytest.approx(-30.1, abs=1.5)     # docs "≈ −30 dB"
 
 
 # --- helpers (mirror run.py defaults) -------------------------------------------

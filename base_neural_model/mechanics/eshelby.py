@@ -203,7 +203,7 @@ def interaction_verdict_shift_db(f: float) -> float:
     clamped lower bound's factor ``(1 - f)``, whose ``|20 log10(1 - f)|`` is INDEPENDENT
     of ``kappa_dilute`` -- so this single number bounds the interaction effect at any kappa
     anchor. ~1.4 dB at ``f = 0.15`` (the operating fraction), ~3.1 dB at ``f = 0.30``:
-    negligible against the model's ~-65 dB verdict and the ~60 dB (3-decade) eta span, so
+    negligible against the model's ~-88 dB verdict and the ~60 dB (3-decade) eta span, so
     the dilute kappa is used rather than a Mori-Tanaka midpoint (which would inject the
     boundary-condition ambiguity for a sub-1.4 dB effect).
     """

@@ -51,7 +51,7 @@ uv run python scripts/plot_displacement_timeseries.py
   activity, and the dz(t) spectrum). Synchrony `s ≈ 0.97`, `f_c ≈ 20 Hz`.
 - **The honest Gate-A demo** — `run_motor_demo()` — bursty beta with in-burst (p90)
   synchrony scoring and the honest source-physics factors (transduction chain,
-  mechanisms, budget). This is the ≈ −60 dB content-band verdict.
+  mechanisms, budget). This is the ≈ −88 dB content-band verdict.
 - **A movement trial** — `run_motor_trial(MovementProfile(...))` — the desync→rebound
   arc for the dz(t) timeseries.
 

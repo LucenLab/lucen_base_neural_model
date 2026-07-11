@@ -8,22 +8,19 @@ loss then echo SNR (epoch, the motor advantage, is material but now sqrt(N)-scal
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
 from base_neural_model.base.bands import Band
 from base_neural_model.base.provenance import Provenance
 from base_neural_model.base.types import MechanicalDisplacement
-from dataclasses import replace
-
 from base_neural_model.forward.budget import (
     acoustic_axis_ranking,
-    frequency_trade_curve,
-    frequency_trade_optimum,
     sweep_axis,
 )
 from base_neural_model.forward.detection import AcquisitionParams, detection_budget
-from base_neural_model.forward.skull import skull_loss_from_freq
 
 
 def _mech(dz_m: float = 3.5e-9, survival: float = 0.81) -> MechanicalDisplacement:

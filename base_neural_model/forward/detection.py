@@ -196,9 +196,11 @@ class AcquisitionParams:
         """The prior all-favourable baseline (attenuation-only skull, full integration).
 
         Identical readout/aperture/skull to :meth:`demo_motor` but with every
-        honest-physics term at its inert default, so it reproduces the historical
-        ``-13.03 dB`` verdict. Kept for the additive before/after audit, not as a
-        recommended operating point.
+        honest-physics term at its inert default. Composed with the honest source through
+        ``run_motor_demo(acquisition=demo_motor_optimistic())`` it lands at ≈ −65 dB --
+        the acoustic-only before/after contrast against the ≈ −88 dB honest default, which
+        isolates how much of the gap the honest *acoustic* terms (vs the source terms)
+        open. Kept for that audit, not as a recommended operating point.
         """
         return cls(
             center_freq_hz=2e6,
@@ -223,10 +225,11 @@ class AcquisitionParams:
         * **Echo SNR capped at the transcranial safety ceiling, not raised.** 28 dB, i.e.
           ``max_per_element_echo_snr_db(12)`` (40 dB MI-limited surface figure minus the
           12 dB one-way transmit skull loss; see :mod:`base_neural_model.forward.safety`).
-          This is *lower* than ``demo_motor``'s 30 dB -- respecting the MI/thermal limit is
-          the point, so ``echo_snr_within_safety`` is True here where it is False for
-          ``demo_motor``. Hardcoded (``10**2.8``) to avoid a circular import with
-          ``safety.py``; the invariant is pinned by ``test_detection``.
+          This is the *same* 28 dB ceiling ``demo_motor`` now sits at (both were corrected
+          down from the old unsafe 30 dB), so ``echo_snr_within_safety`` is True for both --
+          the engineering gap here comes from the aperture and integration levers below,
+          NOT from assuming more transmit power. Hardcoded (``10**2.8``) to avoid a circular
+          import with ``safety.py``; the invariant is pinned by ``test_detection``.
         * **Aperture correction (D4): 0.6 -> 0.9.** The metamaterial aberration-correcting
           stack -- the architecture's headline feature, excluded from the honest baseline --
           restores most of the coherent aperture through the skull.

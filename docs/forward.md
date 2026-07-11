@@ -135,16 +135,19 @@ reproduces the prior attenuation-only, full-integration −13 dB baseline) and f
 ## The honest result
 
 Under the honest terms (`run_motor_demo()`, verified live), the flagship demo reports a
-**content-band verdict of ≈ −64.9 dB**, echo-SNR-limited: the bare direct-neuromechanical
-beta signal (~0.1 nm surviving, at the ~0.4 nm mammalian Δr, in-burst s ≈ 0.83) against a
-**~184 nm** through-skull floor — the floor raised from the old 17.5 nm by the burst-limited
-integration (×10 not ×77), the aperture decoherence (n_eff = 154), the echo correlation and
-the residual-aberration floor. This is **not** "within an order": the direct beta signal is
-~50 dB below the floor, and the honest stack strips ~52 dB off the old −13 dB. The prior
-−13 dB is preserved as `demo_motor_optimistic()` for the before/after audit.
+**content-band verdict of ≈ −87.8 dB**, echo-SNR-limited: the bare direct-neuromechanical
+beta signal (~0.0094 nm surviving, at the ~0.3 nm mammalian Δr midpoint, in-burst s ≈ 0.83)
+against a **~232 nm** through-skull floor — the floor raised from the optimistic 17.5 nm by
+the burst-limited integration (×10 not ×77), the aperture decoherence (n_eff = 154), the echo
+correlation and the residual-aberration floor. This is **not** "within an order": the direct
+beta signal is ~88 dB (~4.4 decades) below the floor. Composing the *same* honest source with
+the all-favourable acoustic baseline (`run_motor_demo(acquisition=demo_motor_optimistic())`)
+lands at ≈ −65 dB, so the honest *acoustic* terms alone cost ~22 dB; the rest is the honest
+source physics. (The acoustic layer in isolation, against a fixed synthetic ~3.9 nm source, is
+the −13.03 dB unit-test baseline pinned in `test_detection.py`.)
 
 The **band-separated mechanism decomposition** (S2, `report.mechanisms`) makes the trade
-explicit: the slow **hemodynamic (vascular/CBV) envelope** is ~750 nm → **+12.8 dB**, orders
+explicit: the slow **hemodynamic (vascular/CBV) envelope** is ~800 nm → **+10.8 dB**, orders
 larger than the direct term — but that is the **fUS signal** (cerebral blood volume), an
 envelope, not the specific beta carrier, and in a phase-displacement readout it is removed
 by the 1 Hz clutter high-pass (fUS instead uses power-Doppler, a different modality). So the
@@ -153,13 +156,13 @@ that *is* detectable is ordinary functional ultrasound.
 
 ## The optimistic engineering-gap counterpart — `run_motor_demo_optimistic()`
 
-The honest −60 dB is the *pessimistic* end of a range; the spec's Stage 0 claims the gap is
-"one to two orders," not three. `run_motor_demo_optimistic()`
+The honest −87.8 dB is the *pessimistic* end of a range; the spec's Stage 0 claims the gap is
+"one to two orders," not four. `run_motor_demo_optimistic()`
 ([`run.py`](../base_neural_model/model/run.py)) composes the other end: every **contestable**
 lever at its favourable-but-**physically-possible** value, with the neural biology and Δr
-held fixed. It reports a content-band verdict of **≈ −25 dB (~1.25 orders under floor)** —
-squarely inside the spec's engineering gap — via a **67 nm** floor and a **3.8 nm** surviving
-signal (vs 184 nm / 0.19 nm honest).
+held fixed. It reports a content-band verdict of **≈ −30 dB (~1.5 orders under floor)** —
+squarely inside the spec's engineering gap — via a **67 nm** floor and a **2.1 nm** surviving
+signal (vs 232 nm / 0.0094 nm honest).
 
 Each moved lever, and why none is physically impossible:
 
@@ -170,21 +173,22 @@ Each moved lever, and why none is physically impossible:
   ms); `L` 0.3→1.5 mm (the coherently-active M1 column, not the range gate — Δz ∝ L; the cost
   is *depth* resolution, not the lateral finger-separation axis).
 - **Floor** ([`AcquisitionParams.demo_motor_engineering`](../base_neural_model/forward/detection.py)):
-  echo SNR **capped at the 28 dB transcranial safety ceiling** (lower than the honest 30 dB —
-  `echo_snr_within_safety` is now True where it was False); aperture coherence 0.6→0.9 (the
+  echo SNR **capped at the 28 dB transcranial safety ceiling** (the same ceiling the honest
+  preset now sits at — both are `echo_snr_within_safety` True, so this is not a lever here);
+  aperture coherence 0.6→0.9 (the
   metamaterial correction the architecture is built around); and the 2 ms frame-decorrelation
   cap removed so N_ens is the burst-window 800 (thermal-independent frames), resolving the
   D1/echo-SNR-limited tension.
 
-**Held fixed** (not levers): Δr (the cited whole-cell 0.4 nm — `run_neural_model` re-pins it;
+**Held fixed** (not levers): Δr (the cited whole-cell 0.3 nm midpoint — `run_neural_model` re-pins it;
 raising it double-counts within-cell cancellation), the honest source-transfer sub-factors
 (S1/S3/S6), the neural synchrony/jitter/orientation, and the safety cap. The guardrails
 `η ≤ 1`, `κ ≥ 1/3`, and `echo_snr_within_safety` are pinned in
 [`test_model_run.py`](../tests/test_model_run.py) and
 [`test_detection.py`](../tests/test_detection.py).
 
-The reading: honest and optimistic bracket the *same* signal — ~3 orders under at the
-pessimistic end, ~1.25 at the physically-achievable-best end. Neither flips the sign; the
+The reading: honest and optimistic bracket the *same* signal — ~4.4 orders under at the
+pessimistic end, ~1.5 at the physically-achievable-best end. Neither flips the sign; the
 fast, effector-specific carrier is under the through-skull floor across the whole plausible
 range, and the spread between the two is almost entirely the two D1 integration caps plus the
 aberration-correction and safety-cap accounting.

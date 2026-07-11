@@ -157,7 +157,6 @@ def test_spectrum_content_peak_is_none_when_no_content_power():
 
 def test_reduce_rejects_envelope_only_activity(monkeypatch):
     """reduce_to_state raises rather than mislabel a pure-envelope signal as content."""
-    import numpy as np
 
     from base_neural_model.activity import run_activity
     from base_neural_model.activity.populations import EIParams

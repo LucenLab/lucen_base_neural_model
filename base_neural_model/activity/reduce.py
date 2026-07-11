@@ -16,8 +16,8 @@ from __future__ import annotations
 import numpy as np
 
 from base_neural_model.activity.jitter import total_jitter
-from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.activity.orientation import effective_orientation_coherence
+from base_neural_model.activity.oscillation import ENVELOPE_CONTENT_BOUNDARY_HZ
 from base_neural_model.activity.timeseries import ActivityTimeseries
 from base_neural_model.base.bands import Band
 from base_neural_model.base.provenance import extend

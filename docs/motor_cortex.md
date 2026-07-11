@@ -119,7 +119,7 @@ abstracted. Pinned by [`test_motor_dynamics.py`](../tests/test_motor_dynamics.py
   (`bursty_beta_drive` — beta is transient, not sustained, even under held demand) and scores
   the **in-burst** synchrony (p90), so the burst-intermittency penalty is charged once, on the
   acoustic side (the coherence-window cap), not twice. It returns both the content-band verdict
-  (`report.detection`, ≈ −65 dB) and the band-separated mechanism decomposition
+  (`report.detection`, ≈ −88 dB) and the band-separated mechanism decomposition
   (`report.mechanisms`: the large hemodynamic/fUS envelope vs the tiny beta carrier).
 
 ## Tests

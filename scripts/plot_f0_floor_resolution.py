@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 from base_neural_model.forward.budget import frequency_trade_curve
-from base_neural_model.forward.detection import AcquisitionParams, DEFAULT_SOUND_SPEED_MPS
+from base_neural_model.forward.detection import DEFAULT_SOUND_SPEED_MPS, AcquisitionParams
 from base_neural_model.forward.skull import skull_loss_from_freq
 from base_neural_model.model import run_motor_demo, run_motor_demo_optimistic
 
@@ -77,8 +77,8 @@ def build_figure():
                label=f"optimistic signal {sig_opt * 1e9:.3g} nm")
 
     ax.plot(fmhz[i], wt[i] * 1e9, "o", color="#2c6fbb", ms=9, zorder=6)
-    ax.annotate("floor min %.0f nm @ %.2f MHz\n(best case: full integration,\nzero jitter)"
-                % (wt[i] * 1e9, fmhz[i]),
+    ax.annotate(f"floor min {wt[i] * 1e9:.0f} nm @ {fmhz[i]:.2f} MHz\n"
+                "(best case: full integration,\nzero jitter)",
                 xy=(fmhz[i], wt[i] * 1e9), xytext=(0.31, 1.5e4),
                 fontsize=9, fontweight="bold", color="#2c6fbb",
                 arrowprops=dict(arrowstyle="->", color="#2c6fbb"))
@@ -93,16 +93,19 @@ def build_figure():
     ax2.loglog(fmhz, C / freqs * 1e3, color="grey", lw=1.4, alpha=0.8)
     ax2.set_ylabel("spatial resolution ~ wavelength lambda (mm)", color="grey")
     ax2.tick_params(axis="y", colors="grey")
-    ax2.annotate("resolution here:\nlambda = %.1f mm (axial ~%.1f mm)" % (lam_min * 1e3, lam_min * 1e3 / 2),
+    ax2.annotate(f"resolution here:\nlambda = {lam_min * 1e3:.1f} mm "
+                 f"(axial ~{lam_min * 1e3 / 2:.1f} mm)",
                  xy=(fmhz[i], lam_min * 1e3), xytext=(1.4, 4.0),
                  fontsize=9, color="dimgrey", fontweight="bold",
                  arrowprops=dict(arrowstyle="->", color="grey"))
 
     fig.tight_layout(rect=[0, 0, 1, 0.95])
-    print("WT-only floor min %.4g nm at %.3g MHz (skull one-way %.3g dB); resolution lambda %.3g mm; "
-          "gap to honest signal %.1f dB"
-          % (wt[i] * 1e9, fmhz[i], skull_loss_from_freq(freqs[i]), lam_min * 1e3,
-             20 * np.log10(sig / wt[i])))
+    print(
+        f"WT-only floor min {wt[i] * 1e9:.4g} nm at {fmhz[i]:.3g} MHz "
+        f"(skull one-way {skull_loss_from_freq(freqs[i]):.3g} dB); "
+        f"resolution lambda {lam_min * 1e3:.3g} mm; "
+        f"gap to honest signal {20 * np.log10(sig / wt[i]):.1f} dB"
+    )
     return fig
 
 

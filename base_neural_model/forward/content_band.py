@@ -66,7 +66,10 @@ import numpy as np
 from base_neural_model.activity.jitter import ABSOLUTE_JITTER_FLOOR_S, total_jitter
 from base_neural_model.activity.timeseries import ActivityTimeseries
 from base_neural_model.base.bands import BETA_BAND, RhythmBand
-from base_neural_model.forward.detection import AcquisitionParams, phase_displacement_floor
+from base_neural_model.forward.detection import (
+    AcquisitionParams,
+    phase_displacement_floor,
+)
 
 # Physical admissibility for a content carrier is now a per-rhythm :class:`RhythmBand`
 # (see :mod:`base_neural_model.base.bands`): the sensorimotor beta box for a motor

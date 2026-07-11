@@ -16,7 +16,6 @@ from base_neural_model.base.bands import Band
 from base_neural_model.base.provenance import Provenance
 from base_neural_model.base.types import MechanicalDisplacement
 from base_neural_model.forward.separability import (
-    GRATING_LOBE_PITCH_RATIO,
     UNAPODIZED_SIDELOBE_DB,
     BeamAperture,
     min_separable_distance,
@@ -158,7 +157,7 @@ def test_leakage_monotone_nonincreasing_with_separation():
     # Not strictly monotone inside the first lobe (sinc^2 magnitude dips through the
     # null), but must never exceed its value at the main lobe and must settle at the
     # floor past the first null -- check the settled tail is monotone-flat.
-    past_null = [leak for s, leak in zip(seps, leaks) if s > ap.lateral_width_m]
+    past_null = [leak for s, leak in zip(seps, leaks, strict=True) if s > ap.lateral_width_m]
     assert all(leak == pytest.approx(past_null[0], rel=1e-6) for leak in past_null)
 
 

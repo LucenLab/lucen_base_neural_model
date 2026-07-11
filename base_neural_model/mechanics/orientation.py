@@ -31,7 +31,7 @@ physically relevant one for the fast band, and it makes the direct signal SMALLE
 larger. The preset uses the soma-positive convention; a reviewer modelling the fibre
 channel should set ``anisotropy`` with the negative-signed effective value (via a
 negative ``mean_axis_projection`` contribution or an explicitly reduced/negated beta).
-Either way the total-axial swing is a few dB about the ~-60 dB verdict -- it does not
+Either way the total-axial swing is a few dB about the ~-88 dB verdict -- it does not
 resurrect the direct signal.
 
 Temporal synchrony ``s`` (do cells fire at the *same time*) and **directional

@@ -25,7 +25,6 @@ from base_neural_model.activity.motor_drive import (
     MovementProfile,
     bursty_beta_drive,
     movement_drive,
-    sustained_imagery_drive,
 )
 from base_neural_model.activity.populations import EIParams
 from base_neural_model.activity.reduce import reduce_to_state
@@ -397,11 +396,12 @@ def run_motor_demo_optimistic(
       corrected aperture, thermal-independent integration, beta-burst window kept).
 
     Nothing physically impossible: Delta r is locked, eta <= 1, kappa >= 1/3, and the echo
-    SNR is *within* the MI/thermal safety ceiling (``echo_snr_within_safety`` True, unlike
-    ``demo_motor``). The verdict lands at ~-25 dB (~1.25 orders under the through-skull
-    floor) -- the spec's "one to two orders" engineering gap -- versus ~-60 dB (~3 orders)
-    for the honest :func:`run_motor_demo`. This is the optimistic END of the same range; the
-    honest preset is the pessimistic end. No honest preset is modified.
+    SNR is *within* the MI/thermal safety ceiling (``echo_snr_within_safety`` True; the
+    honest ``demo_motor`` now sits at the same 28 dB ceiling, so both are within safety).
+    The verdict lands at ~-30 dB (~1.5 orders under the through-skull floor) -- the spec's
+    "one to two orders" engineering gap -- versus ~-88 dB (~4.4 orders) for the honest
+    :func:`run_motor_demo`. This is the optimistic END of the same range; the honest preset
+    is the pessimistic end. No honest preset is modified.
     """
     drive = bursty_beta_drive(occupancy=burst_occupancy, burst_duration_s=burst_duration_s)
     return run_neural_model(

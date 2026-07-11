@@ -38,7 +38,7 @@ tissue dilatation should carry a similarly small eta. Yet the direct chain
 (``transduction.py``) runs at ``dilatation_eta = 0.5`` -- ~10x more generous than the
 osmotic term, with no compartment discount. This is deliberately left as the poroelastic
 sweep's job (``poroelastic.py`` sweeps eta across ~0.01..1 and the verdict collapses onto
-it), but it means the ~-60 dB direct-term verdict is, if anything, OPTIMISTIC: a
+it), but it means the ~-88 dB direct-term verdict is, if anything, OPTIMISTIC: a
 compartment-consistent fast eta (~0.05-0.1) would push the direct beta signal a further
 ~10-20 dB down. The vascular term legitimately keeps ``eta ~ 1`` because blood adds
 volume from OUTSIDE the closed ECS/cell system -- which is exactly why it, and not the
